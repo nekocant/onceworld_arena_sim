@@ -127,11 +127,11 @@ if st.button("⚔️ バトル開始！", type="primary"):
     
     battle_teams = {"A": [], "B": [], "C": []}
     
-    # Starting positions
+    # Starting positions (shrunk to make field smaller)
     positions = {
-        "A": (100, 100),
-        "B": (900, 100),
-        "C": (500, 800)
+        "A": (300, 300),
+        "B": (700, 300),
+        "C": (500, 600)
     }
     
     for t_name, t_list in teams_dict.items():

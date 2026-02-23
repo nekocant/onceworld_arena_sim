@@ -66,9 +66,9 @@ class Monster:
 
     def move_towards(self, target, delta_time):
         if self.mov == 0:
-            speed = 5.0 # Fixed small movement for MOV=0
+            speed = 15.0 # Increased tiny baseline
         else:
-            speed = 50.0 * (1 + self.mov * 0.1) # Base arbitrary speed scaled by MOV (each MOV gives +10%)
+            speed = 80.0 * (1 + self.mov * 0.15) # Increased base speed from 50 to 80, and MOV multiplier
 
         dist = self.distance_to(target)
         if dist > self.attack_range:
