@@ -7,6 +7,29 @@ import time
 
 st.set_page_config(page_title="OnceWorld アリーナ勝敗予想", layout="wide")
 
+# Custom CSS for white-outlined buttons and selectboxes
+st.markdown("""
+<style>
+/* Make secondary buttons have a white outline */
+button[kind="secondary"] {
+    border: 1px solid white !important;
+    background-color: transparent !important;
+    color: white !important;
+}
+button[kind="secondary"]:hover {
+    border: 1px solid #1E90FF !important;
+    color: #1E90FF !important;
+}
+
+/* Style the Selectbox input to have a white outline */
+div[data-baseweb="select"] > div {
+    border: 1px solid white !important;
+    background-color: transparent !important;
+    color: white !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # Load data (removed cache so edits to CSV are immediately reflected)
 def load_data(filename):
     return pd.read_csv(filename)
