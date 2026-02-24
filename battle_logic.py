@@ -206,13 +206,17 @@ class Field:
                 
             # Move & Attack
             m.cooldown -= delta_time
-            if min_dist <= m.attack_range and m.cooldown <= 0:
-                # 射程内かつクールダウン完了なら攻撃
+            
+            # 1. 射程外なら常に接近する
+            if min_dist > m.attack_range:
+                m.move_towards(nearest_enemy, delta_time)
+                
+            # 2. 射程内（または移動後に射程内に入った）かつクールダウン完了なら攻撃
+            # ※移動後の距離を再計算して判定
+            new_dist = m.distance_to(nearest_enemy)
+            if new_dist <= m.attack_range and m.cooldown <= 0:
                 attack_result = m.attack(nearest_enemy)
                 pending_attacks.append(attack_result)
-            elif min_dist > m.attack_range:
-                # 射程外なら（クールダウン関係なく）常に接近
-                m.move_towards(nearest_enemy, delta_time)
         
         # ===== Phase 2: 全ダメージを一括適用 =====
         for result in pending_attacks:

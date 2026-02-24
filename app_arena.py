@@ -129,12 +129,7 @@ if start_battle or skip_battle:
         st.toast("バトルスタート！", icon="⚔️")
     else:
         st.toast("シミュレーションを高速処理中...", icon="⏩")
-    countdown_container = st.empty()
-    for i in [3, 2, 1]:
-        countdown_container.markdown(f"<h1 style='text-align: center; font-size: 80px;'>{i}</h1>", unsafe_allow_html=True)
-        time.sleep(1)
-    countdown_container.empty()
-    st.toast("バトルスタート！", icon="⚔️")
+
     
     st.subheader("🏁 バトルログ")
     
