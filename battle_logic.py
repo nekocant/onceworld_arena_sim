@@ -78,7 +78,8 @@ class Monster:
         if dist > self.attack_range:
             step = speed * delta_time
             if step > dist - self.attack_range:
-                step = dist - self.attack_range
+                # 浮動小数点の誤差対策: ピタリと止まると誤差で「射程外」判定になるため 0.1 だけ食い込ませる
+                step = (dist - self.attack_range) + 0.1
                 
             # Prevent division by zero if they are exactly on top of each other
             safe_dist = max(1.0, dist)
@@ -221,8 +222,8 @@ class Field:
             # ロックオンしたターゲットとの距離を測る
             dist = m.distance_to(m.current_target)
             
-            # 射程外なら常に接近する
-            if dist > m.attack_range:
+            # 射程外なら常に接近する（浮動小数点の誤差を考慮し +0.1 のバッファ）
+            if dist > m.attack_range + 0.1:
                 m.move_towards(m.current_target, delta_time)
                 
         # ===== Phase 2: 攻撃フェーズ =====
@@ -236,7 +237,8 @@ class Field:
             dist = m.distance_to(m.current_target)
                 
             # 新しい距離が射程内で、かつクールダウンが完了していれば攻撃
-            if dist <= m.attack_range and m.cooldown <= 0:
+            # ※浮動小数点演算の誤差を許容するため +0.1 のバッファを設ける
+            if dist <= m.attack_range + 0.1 and m.cooldown <= 0:
                 attack_result = m.attack(m.current_target)
                 pending_attacks.append(attack_result)
         
