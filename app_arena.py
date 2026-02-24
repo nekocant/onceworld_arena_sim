@@ -7,12 +7,11 @@ import time
 
 st.set_page_config(page_title="OnceWorld アリーナ勝敗予想", layout="wide")
 
-# Load data once
-@st.cache_data
-def load_data():
-    return pd.read_csv("monsters.csv")
+# Load data (removed cache so edits to CSV are immediately reflected)
+def load_data(filename):
+    return pd.read_csv(filename)
 
-df = load_data()
+df = load_data("monsters.csv")
 
 # Helper to load a monster by NO.
 def create_monster(team_name, m_no, level):
@@ -103,7 +102,7 @@ for idx, (t_name, t_list) in enumerate(teams_dict.items()):
             else:
                 stats_str = f"HP:{m.hp}, INT:{m.int_stat}, DEF:{m.defense}, MDEF:{m.mdefense}, SPD:{m.spd}, LUCK:{m.luck}"
                 
-            range_str = "🗡️近" if getattr(m, 'range_type', '近') == '近' else "🏹遠"
+            range_str = "🗡️近接" if getattr(m, 'range_type', '近接') == '近接' else "🏹遠隔"
             st.markdown(f"- **Lv.{m.level} {m.name}** ({range_str}/{m.m_type} | {stats_str})")
 
 # Bet
