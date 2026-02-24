@@ -21,13 +21,14 @@ def create_monster(team_name, m_no, level):
 def init_random_team(team_name):
     num_monsters = random.randint(1, 4)
     team = []
-    for _ in range(num_monsters):
-        m_no = random.choice(df['NO.'].tolist())
+    # 重複を防ぐため sample を使用
+    chosen_nos = random.sample(df['NO.'].tolist(), num_monsters)
+    for m_no in chosen_nos:
         level = random.randint(1, 1100)
         team.append(create_monster(team_name, m_no, level))
     return team
 
-st.title("⚔️ OnceWorld アリーナ勝敗予想シミュレーター")
+st.markdown("### ⚔️ OnceWorld アリーナ勝敗予想シミュレーター")
 
 # --- UI Setup ---
 mode = st.radio("選出モード", ["ランダム選出", "手動選出"], horizontal=True)
@@ -76,8 +77,12 @@ else:
                 sel_no = int(sel_m.split(" - ")[0])
                 lv = st.number_input("レベル", min_value=1, max_value=1100, value=100, step=1, key=f"lv_{team_letter}_{i}")
                 
-                # We instantiate and add right away
-                teams_dict[team_letter].append(create_monster(team_letter, sel_no, lv))
+                # We instantiate and add right away, but prevent duplicates
+                is_duplicate = any(existing_m.no == sel_no for existing_m in teams_dict[team_letter])
+                if is_duplicate:
+                    st.warning(f"同じチームに同じモンスター（{sel_m}）を複数入れることはできません。別の種類を選んでください。")
+                else:
+                    teams_dict[team_letter].append(create_monster(team_letter, sel_no, lv))
 
 # Team Colors
 team_colors_hex = {
@@ -103,7 +108,8 @@ for idx, (t_name, t_list) in enumerate(teams_dict.items()):
                 stats_str = f"HP:{m.hp:,}, INT:{m.int_stat:,}, DEF:{m.defense:,}, MDEF:{m.mdefense:,}, SPD:{m.spd:,}, LUCK:{m.luck:,}"
                 
             range_str = "🗡️近接" if getattr(m, 'range_type', '近接') == '近接' else "🏹遠隔"
-            st.markdown(f"- **Lv.{m.level:,} {m.name}** ({range_str}/{m.m_type} | {stats_str})")
+            name_display = f"<span style='color:#DDA0DD;'>{m.name}</span>" if m.m_type == "魔法" else f"<span style='color:white;'>{m.name}</span>"
+            st.markdown(f"- **Lv.{m.level:,} {name_display}** ({range_str}/{m.m_type} | {stats_str})", unsafe_allow_html=True)
 
 # Bet
 st.write("---")
@@ -131,7 +137,7 @@ if start_battle or skip_battle:
         st.toast("シミュレーションを高速処理中...", icon="⏩")
 
     
-    st.subheader("🏁 バトルログ")
+    st.markdown("#### 🏁 バトルログ")
     
     import copy
     
@@ -148,10 +154,17 @@ if start_battle or skip_battle:
         base_x, base_y = positions[t_name]
         for i, m in enumerate(t_list):
             new_m = create_monster(t_name, m.no, m.level)
-            new_m.x = base_x + random.randint(-50, 50)
-            new_m.y = base_y + random.randint(-50, 50)
+            # Scatter coordinates slightly more to prevent instant cluster clashing
+            new_m.x = base_x + random.randint(-100, 100)
+            new_m.y = base_y + random.randint(-100, 100)
             battle_teams[t_name].append(new_m)
             
+    # Check if teams are valid before starting
+    has_empty_team = any(len(t) == 0 for t in battle_teams.values())
+    if has_empty_team and mode == "手動選出":
+         st.error("エラー：重複によりモンスターが0体になっているチームがあります。重複を解消してください。")
+         st.stop()
+         
     field = Field(battle_teams)
     
     log_container = st.empty()
