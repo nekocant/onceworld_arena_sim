@@ -209,23 +209,25 @@ if start_battle or skip_battle:
                 if logs:
                     new_logs_this_frame.extend(logs)
                 
-            # もしこのフレームで新しいログが出た場合のみ、まとめて1回だけ描画を更新する
+            # Colorize logs and accumulate
             if new_logs_this_frame:
-                # Colorize logs
                 colored_logs = []
                 for log in new_logs_this_frame:
                     for t, c in team_colors_hex.items():
                         log = log.replace(f"チーム{t}", colored_text(f"チーム{t}", c))
                     colored_logs.append(log)
-                
                 all_logs.extend(colored_logs)
-                display_logs = "\n".join(all_logs[-15:]) # 最新15行を表示
-                # Wrap in HTML to render color spans
-                log_container.markdown(f"<div style='height: 200px; overflow-y: scroll; padding: 10px; border: 1px solid #ddd; border-radius: 5px; background: #262730; color: white;'>{display_logs.replace(chr(10), '<br>')}</div>", unsafe_allow_html=True)
             
-            # Draw status every 1.0 second of real time
+            # Draw status every 1.0 second of real time (Throttling ST markdown updates)
             if elapsed_real_time - last_display_time >= 1.0:
                 last_display_time = elapsed_real_time
+                
+                # Update visual logs (Only once a second to prevent UI freeze from evade spam)
+                if all_logs:
+                    display_logs = "\n".join(all_logs[-15:]) # 最新15行を表示
+                    log_container.markdown(f"<div style='height: 200px; overflow-y: scroll; padding: 10px; border: 1px solid #ddd; border-radius: 5px; background: #262730; color: white;'>{display_logs.replace(chr(10), '<br>')}</div>", unsafe_allow_html=True)
+
+                # Update visual stats
                 time_left = BATTLE_DURATION - elapsed_real_time
                 time_color = "red" if time_left <= 10 else "white"
                 status_text = f"<h4 style='color:{time_color}'>⏳ 残り時間: {max(0, time_left):.1f}s</h4><br>"
