@@ -77,8 +77,15 @@ class Monster:
             if step > dist - self.attack_range:
                 step = dist - self.attack_range
                 
-            dx = (target.x - self.x) / dist
-            dy = (target.y - self.y) / dist
+            # Prevent division by zero if they are exactly on top of each other
+            safe_dist = max(1.0, dist)
+            dx = (target.x - self.x) / safe_dist
+            dy = (target.y - self.y) / safe_dist
+            
+            # If they are exactly on the same spot, just move them slightly apart
+            if dist == 0:
+                dx, dy = 1.0, 0.0
+                
             self.x += dx * step
             self.y += dy * step
             
@@ -185,11 +192,9 @@ class Field:
         living_monsters = [m for m in self.monsters if not m.is_dead]
         living_monsters.sort(key=lambda x: x.spd, reverse=True)
         
-        # ===== Phase 1: 全モンスターの行動を決定（ダメージは保留） =====
-        pending_attacks = []
-        
+        # ===== Phase 1: 移動フェーズ =====
+        # まず全モンスターの移動先を確定させる（逃げる敵を正しく追いかけるため）
         for m in living_monsters:
-            # Find nearest enemy (※is_deadはこのステップ開始時の状態で判定)
             nearest_enemy = None
             min_dist = float('inf')
             
@@ -204,26 +209,42 @@ class Field:
             if not nearest_enemy:
                 continue
                 
-            # Move & Attack
             m.cooldown -= delta_time
             
-            # 1. 射程外なら常に接近する
+            # 射程外なら常に接近する
             if min_dist > m.attack_range:
                 m.move_towards(nearest_enemy, delta_time)
                 
-            # 2. 射程内（または移動後に射程内に入った）かつクールダウン完了なら攻撃
-            # ※移動後の距離を再計算して判定
-            new_dist = m.distance_to(nearest_enemy)
-            if new_dist <= m.attack_range and m.cooldown <= 0:
+        # ===== Phase 2: 攻撃フェーズ =====
+        # 全員が移動を終えた後の「最終的な距離」をもとに攻撃判定を行う
+        pending_attacks = []
+        for m in living_monsters:
+            nearest_enemy = None
+            min_dist = float('inf')
+            
+            for enemy in living_monsters:
+                if enemy.team == m.team:
+                    continue
+                # 移動後の最新座標で距離を再計算
+                dist = m.distance_to(enemy)
+                if dist < min_dist:
+                    min_dist = dist
+                    nearest_enemy = enemy
+                    
+            if not nearest_enemy:
+                continue
+                
+            # 最新の距離が射程内で、かつクールダウンが完了していれば攻撃
+            if min_dist <= m.attack_range and m.cooldown <= 0:
                 attack_result = m.attack(nearest_enemy)
                 pending_attacks.append(attack_result)
         
-        # ===== Phase 2: 全ダメージを一括適用 =====
+        # ===== Phase 3: 全ダメージを一括適用 =====
         for result in pending_attacks:
             logs.extend(result['logs'])
             result['target'].hp -= result['total_damage']
         
-        # ===== Phase 3: 戦闘不能判定 =====
+        # ===== Phase 4: 戦闘不能判定 =====
         for m in living_monsters:
             if m.hp <= 0 and not m.is_dead:
                 m.is_dead = True
