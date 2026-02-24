@@ -151,12 +151,15 @@ if st.button("⚔️ バトル開始！", type="primary"):
     
     # Run Simulation Loop
     step_count = 0
-    max_steps = 400  # 40 seconds (0.1s * 400 = 40s) limit
+    DELTA_TIME = 0.02   # 0.02秒刻み（高速攻撃の精度を確保）
+    BATTLE_DURATION = 120  # 120秒
+    max_steps = int(BATTLE_DURATION / DELTA_TIME)  # 6000ステップ
+    DISPLAY_INTERVAL = int(1.0 / DELTA_TIME)  # 50ステップ毎（1秒毎）に表示更新
     
     progress_bar = st.progress(0)
     
     while not field.is_finished() and step_count < max_steps:
-        logs = field.step(delta_time=0.1)
+        logs = field.step(delta_time=DELTA_TIME)
         step_count += 1
         
         # update progress bar
@@ -176,9 +179,9 @@ if st.button("⚔️ バトル開始！", type="primary"):
             # Wrap in HTML to render color spans
             log_container.markdown(f"<div style='height: 200px; overflow-y: scroll; padding: 10px; border: 1px solid #ddd; border-radius: 5px; background: #262730; color: white;'>{display_logs.replace(chr(10), '<br>')}</div>", unsafe_allow_html=True)
             
-        # Draw status every 10 steps (1 second sim time)
-        if step_count % 10 == 0:
-            time_left = 40.0 - field.time_elapsed
+        # Draw status every DISPLAY_INTERVAL steps (1 second sim time)
+        if step_count % DISPLAY_INTERVAL == 0:
+            time_left = BATTLE_DURATION - field.time_elapsed
             time_color = "red" if time_left <= 10 else "white"
             status_text = f"<h4 style='color:{time_color}'>⏳ 残り時間: {max(0, time_left):.1f}s</h4><br>"
             
@@ -193,7 +196,7 @@ if st.button("⚔️ バトル開始！", type="primary"):
     # Final Result
     progress_bar.empty()
     if step_count >= max_steps:
-        st.warning("⏳ タイムアップ！ 残念ながら40秒以内に決着がつきませんでした。")
+        st.warning(f"⏳ タイムアップ！ 残念ながら{BATTLE_DURATION}秒以内に決着がつきませんでした。")
         all_logs.append("タイムアップ！ 残りHP等による勝敗判定に入ります。")
         
     winner = field.get_winner()
