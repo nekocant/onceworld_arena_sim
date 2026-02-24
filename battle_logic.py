@@ -67,9 +67,9 @@ class Monster:
 
     def move_towards(self, target, delta_time):
         if self.mov == 0:
-            speed = 15.0 # Increased tiny baseline
+            speed = 25.0 # Increased from 15.0
         else:
-            speed = 80.0 * (1 + self.mov * 0.15) # Increased base speed from 50 to 80, and MOV multiplier
+            speed = 120.0 * (1 + self.mov * 0.15) # Increased from 80.0
 
         dist = self.distance_to(target)
         if dist > self.attack_range:
@@ -206,11 +206,13 @@ class Field:
                 
             # Move & Attack
             m.cooldown -= delta_time
-            if min_dist > m.attack_range:
-                m.move_towards(nearest_enemy, delta_time)
-            elif m.cooldown <= 0:
+            if min_dist <= m.attack_range and m.cooldown <= 0:
+                # 射程内かつクールダウン完了なら攻撃
                 attack_result = m.attack(nearest_enemy)
                 pending_attacks.append(attack_result)
+            elif min_dist > m.attack_range:
+                # 射程外なら（クールダウン関係なく）常に接近
+                m.move_towards(nearest_enemy, delta_time)
         
         # ===== Phase 2: 全ダメージを一括適用 =====
         for result in pending_attacks:
