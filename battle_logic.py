@@ -37,7 +37,7 @@ class Monster:
         
         # Attack speed logic
         self.attack_interval, self.multi_hit = self._calculate_attack_speed()
-        self.attack_range = 30.0 if self.range_type == "近接" else 300.0
+        self.attack_range = 30.0 if self.range_type == "近接" else 150.0
 
     def _calculate_attack_speed(self):
         # returns (interval_seconds, max_hits)
