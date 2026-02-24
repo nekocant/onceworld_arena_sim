@@ -190,6 +190,7 @@ if start_battle or skip_battle:
     else:
         # Live battle viewer
         is_timeout = False
+        last_progress_time = 0.0
         while not field.is_finished():
             current_real_time = time.time()
             elapsed_real_time = current_real_time - start_time
@@ -198,9 +199,11 @@ if start_battle or skip_battle:
                 is_timeout = True
                 break
                 
-            # Update progress bar
-            p = min(1.0, elapsed_real_time / BATTLE_DURATION)
-            progress_bar.progress(p)
+            # Update progress bar (Throttled to 10 FPS to prevent ST WebSocket freeze)
+            if elapsed_real_time - last_progress_time >= 0.1:
+                last_progress_time = elapsed_real_time
+                p = min(1.0, elapsed_real_time / BATTLE_DURATION)
+                progress_bar.progress(p)
             
             # Run simulation steps catch-up (if rendering took time)
             new_logs_this_frame = []
