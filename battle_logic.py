@@ -8,6 +8,7 @@ class Monster:
         self.name = base_data['ペット名']
         self.element = base_data['属性']
         self.m_type = base_data['物魔'] # 物理 or 魔法
+        self.range_type = base_data['レンジ'] if 'レンジ' in base_data else '近'
         self.level = level
         
         # Calculate stats
@@ -36,7 +37,7 @@ class Monster:
         
         # Attack speed logic
         self.attack_interval, self.multi_hit = self._calculate_attack_speed()
-        self.attack_range = 30.0 if self.m_type == "物理" else 300.0
+        self.attack_range = 30.0 if self.range_type == "近" else 300.0
 
     def _calculate_attack_speed(self):
         # returns (interval_seconds, max_hits)

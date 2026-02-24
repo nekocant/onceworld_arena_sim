@@ -103,7 +103,8 @@ for idx, (t_name, t_list) in enumerate(teams_dict.items()):
             else:
                 stats_str = f"HP:{m.hp}, INT:{m.int_stat}, DEF:{m.defense}, MDEF:{m.mdefense}, SPD:{m.spd}, LUCK:{m.luck}"
                 
-            st.markdown(f"- **Lv.{m.level} {m.name}** ({stats_str})")
+            range_str = "🗡️近" if getattr(m, 'range_type', '近') == '近' else "🏹遠"
+            st.markdown(f"- **Lv.{m.level} {m.name}** ({range_str}/{m.m_type} | {stats_str})")
 
 # Bet
 st.write("---")
