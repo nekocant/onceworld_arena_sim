@@ -37,7 +37,7 @@ class Monster:
         
         # Attack speed logic
         self.attack_interval, self.multi_hit = self._calculate_attack_speed()
-        self.attack_range = 30.0 if self.range_type == "近接" else 150.0
+        self.attack_range = 30.0 if self.range_type == "近接" else 100.0
 
     def _calculate_attack_speed(self):
         # returns (interval_seconds, max_hits)
@@ -232,9 +232,20 @@ class Field:
                 alive_teams.add(m.team)
         return len(alive_teams) <= 1
         
-    def _get_team_total_hp(self, team_name):
-        return sum(m.hp for m in self.monsters if m.team == team_name and not m.is_dead)
-
+    def _get_team_avg_hp_percentage(self, team_name):
+        team_mons = [m for m in self.monsters if m.team == team_name]
+        if not team_mons:
+            return 0.0
+        # Calculate the average of each alive monster's HP percentage
+        total_percentage = 0.0
+        alive_count = 0
+        for m in team_mons:
+            if not m.is_dead:
+                # 0.0 to 1.0 representation
+                total_percentage += (m.hp / m.max_hp)
+                alive_count += 1
+        return total_percentage / len(team_mons) if len(team_mons) > 0 else 0.0
+        
     def _get_team_avg_level(self, team_name):
         team_mons = [m for m in self.monsters if m.team == team_name]
         if not team_mons:
@@ -254,21 +265,22 @@ class Field:
             alive_teams = set(self.teams.keys())
             
         # Tie breakers for timeout or multiple alive teams
-        # 2. Total Remaining HP
-        best_hp = -1
+        # 2. Average Remaining HP Percentage
+        best_hp_pct = -1.0
         hp_candidates = []
         for t in alive_teams:
-            thp = self._get_team_total_hp(t)
-            if thp > best_hp:
-                best_hp = thp
+            thp_pct = self._get_team_avg_hp_percentage(t)
+            # Compare using a small tolerance for floats
+            if thp_pct > best_hp_pct + 0.0001:
+                best_hp_pct = thp_pct
                 hp_candidates = [t]
-            elif thp == best_hp:
+            elif abs(thp_pct - best_hp_pct) <= 0.0001:
                 hp_candidates.append(t)
                 
         if len(hp_candidates) == 1:
             return hp_candidates[0]
             
-        # 3. Lowest Average Level (among those tied for HP)
+        # 3. Lowest Average Level (among those tied for HP Pct)
         lowest_lv = float('inf')
         lv_candidates = []
         for t in hp_candidates:
