@@ -204,8 +204,9 @@ if st.button("⚔️ バトル開始！", type="primary"):
             
     # Final Result
     progress_bar.empty()
-    if step_count >= max_steps:
-        st.warning(f"⏳ タイムアップ！ 残念ながら{BATTLE_DURATION}秒以内に決着がつきませんでした。")
+    # 経過時間が設定時間を超えていればタイムアップ
+    if elapsed_real_time >= BATTLE_DURATION:
+        st.warning(f"⏳ タイムアップ！ 残念ながら{BATTLE_DURATION:.1f}秒以内に決着がつきませんでした。")
         all_logs.append("タイムアップ！ 残りHP等による勝敗判定に入ります。")
         
     winner = field.get_winner()
