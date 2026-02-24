@@ -83,13 +83,12 @@ class Monster:
             self.y += dy * step
             
     def attack(self, target):
+        """攻撃を計算し、結果を返す（ダメージはまだ適用しない＝同時解決用）"""
         self.cooldown = self.attack_interval
         
         logs = []
+        total_damage = 0
         for hit in range(self.multi_hit):
-            if target.is_dead:
-                break
-                
             # Accuracy check
             hit_chance = 1.0
             luck_ratio = target.luck / max(1, self.luck)
@@ -129,12 +128,8 @@ class Monster:
                 
             # Base raw stat vs Defense
             if self.m_type == '物理':
-                # ((自分のATK×1.75)-(相手のDEF+相手のMDEF/10))
-                # Note: target.defense already includes target.mdefense / 10 in __init__, so we just use target.defense
                 base_dmg = (self.atk * 1.75) - target.defense
             else:
-                # ((自分のINT×1.75)-(相手のMDEF+相手のDEF/10))
-                # Note: target.mdefense already includes target.defense / 10 in __init__, so we just use target.mdefense
                 base_dmg = (self.int_stat * 1.75) - target.mdefense
                 
             if base_dmg < 0:
@@ -147,8 +142,6 @@ class Monster:
             rng_mult = random.uniform(0.9, 1.1)
             
             # Critical hit check
-            # "相手とのLUCKが近い時に数％の確率で発生"
-            # we will define "close" as within 20% difference, and give it a 5% chance. 
             crit_mult = 1.0
             is_crit = False
             luck_diff_ratio = abs(self.luck - target.luck) / max(1, max(self.luck, target.luck))
@@ -164,16 +157,12 @@ class Monster:
             if dmg <= 0:
                 dmg = 1
                 
-            target.hp -= dmg
+            total_damage += dmg
             
             crit_text = "【クリティカル！】" if is_crit else ""
             logs.append(f"{self.name} は {target.name} に {crit_text}{dmg} のダメージ！")
-            
-            if target.hp <= 0:
-                target.is_dead = True
-                logs.append(f"{target.name} は倒れた！")
                 
-        return logs
+        return {'target': target, 'total_damage': total_damage, 'logs': logs}
 
 class Field:
     def __init__(self, teams):
@@ -186,26 +175,26 @@ class Field:
         self.time_elapsed = 0.0
 
     def step(self, delta_time=0.1):
+        """同時解決型のステップ処理：全モンスターが同時に行動する"""
         logs = []
         if self.is_finished():
             return logs
             
         self.time_elapsed += delta_time
         
-        # Sort by speed descending (faster moves first in a step)
         living_monsters = [m for m in self.monsters if not m.is_dead]
         living_monsters.sort(key=lambda x: x.spd, reverse=True)
         
+        # ===== Phase 1: 全モンスターの行動を決定（ダメージは保留） =====
+        pending_attacks = []
+        
         for m in living_monsters:
-            if m.is_dead:
-                continue
-                
-            # Find nearest enemy
+            # Find nearest enemy (※is_deadはこのステップ開始時の状態で判定)
             nearest_enemy = None
             min_dist = float('inf')
             
             for enemy in living_monsters:
-                if enemy.team == m.team or enemy.is_dead:
+                if enemy.team == m.team:
                     continue
                 dist = m.distance_to(enemy)
                 if dist < min_dist:
@@ -220,8 +209,19 @@ class Field:
             if min_dist > m.attack_range:
                 m.move_towards(nearest_enemy, delta_time)
             elif m.cooldown <= 0:
-                attack_logs = m.attack(nearest_enemy)
-                logs.extend(attack_logs)
+                attack_result = m.attack(nearest_enemy)
+                pending_attacks.append(attack_result)
+        
+        # ===== Phase 2: 全ダメージを一括適用 =====
+        for result in pending_attacks:
+            logs.extend(result['logs'])
+            result['target'].hp -= result['total_damage']
+        
+        # ===== Phase 3: 戦闘不能判定 =====
+        for m in living_monsters:
+            if m.hp <= 0 and not m.is_dead:
+                m.is_dead = True
+                logs.append(f"{m.name} は倒れた！")
                 
         return logs
         
