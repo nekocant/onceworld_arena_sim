@@ -108,7 +108,8 @@ for idx, (t_name, t_list) in enumerate(teams_dict.items()):
                 stats_str = f"HP:{m.hp:,}, INT:{m.int_stat:,}, DEF:{m.defense:,}, MDEF:{m.mdefense:,}, SPD:{m.spd:,}, LUCK:{m.luck:,}"
                 
             range_str = "🗡️近接" if getattr(m, 'range_type', '近接') == '近接' else "🏹遠隔"
-            name_display = f"<span style='color:#DDA0DD;'>{m.name}</span>" if m.m_type == "魔法" else f"<span style='color:white;'>{m.name}</span>"
+            outline = "text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;"
+            name_display = f"<span style='color:#DDA0DD; {outline}'>{m.name}</span>" if m.m_type == "魔法" else f"<span style='color:white; {outline}'>{m.name}</span>"
             st.markdown(f"- **Lv.{m.level:,} {name_display}** ({range_str}/{m.m_type} | {stats_str})", unsafe_allow_html=True)
 
 # Bet
