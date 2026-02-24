@@ -70,9 +70,9 @@ class Monster:
 
     def move_towards(self, target, delta_time):
         if self.mov == 0:
-            speed = 25.0 # Increased from 15.0
+            speed = 10.0 # Reduced from 25.0
         else:
-            speed = 120.0 * (1 + self.mov * 0.15) # Increased from 80.0
+            speed = 70.0 * (1 + self.mov * 0.15) # Reduced from 120.0
 
         dist = self.distance_to(target)
         if dist > self.attack_range:

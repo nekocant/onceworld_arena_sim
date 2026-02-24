@@ -248,6 +248,21 @@ if start_battle or skip_battle:
             # Small sleep to prevent freezing the browser/app
             time.sleep(0.01)
             
+    # ====== FINAL RENDER (Ensure last hits and surviving team HP are shown) ======
+    if all_logs:
+        display_logs = "\n".join(all_logs[-15:])
+        log_container.markdown(f"<div style='height: 200px; overflow-y: scroll; padding: 10px; border: 1px solid #ddd; border-radius: 5px; background: #262730; color: white;'>{display_logs.replace(chr(10), '<br>')}</div>", unsafe_allow_html=True)
+
+    time_left = BATTLE_DURATION - elapsed_real_time
+    time_color = "red" if time_left <= 10 else "white"
+    status_text = f"<h4 style='color:{time_color}'>⏳ 残り時間: {max(0, time_left):.1f}s (決着)</h4><br>"
+    for m in field.monsters:
+        m_color = team_colors_hex[m.team]
+        state = "💀" if m.is_dead else f"❤️ {m.hp:,}/{m.max_hp:,}"
+        status_text += f"<span style='color:{m_color};'>[{m.team}] Lv.{m.level:,} {m.name}</span> : {state} (x:{m.x:.0f}, y:{m.y:.0f})<br>"
+    status_container.markdown(status_text, unsafe_allow_html=True)
+    # ==============================================================================
+
     # Final Result
     progress_bar.empty()
     # 経過時間が設定時間を超えていればタイムアップ
