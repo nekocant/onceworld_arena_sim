@@ -155,8 +155,8 @@ if start_battle or skip_battle:
         for i, m in enumerate(t_list):
             new_m = create_monster(t_name, m.no, m.level)
             # Scatter coordinates slightly more to prevent instant cluster clashing
-            new_m.x = base_x + random.randint(-100, 100)
-            new_m.y = base_y + random.randint(-100, 100)
+            new_m.x = base_x + random.randint(-250, 250)
+            new_m.y = base_y + random.randint(-250, 250)
             battle_teams[t_name].append(new_m)
             
     # Check if teams are valid before starting
