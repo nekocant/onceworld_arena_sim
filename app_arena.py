@@ -108,7 +108,8 @@ for idx, (t_name, t_list) in enumerate(teams_dict.items()):
                 stats_str = f"HP:{m.hp:,}, INT:{m.int_stat:,}, DEF:{m.defense:,}, MDEF:{m.mdefense:,}, SPD:{m.spd:,}, LUCK:{m.luck:,}"
                 
             range_str = "🗡️近接" if getattr(m, 'range_type', '近接') == '近接' else "🏹遠隔"
-            outline = "text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;"
+            # Softer, natural drop shadow for readability on light backgrounds
+            outline = "text-shadow: 1px 1px 3px rgba(0,0,0,0.9), 0px 0px 2px rgba(0,0,0,0.7);"
             name_display = f"<span style='color:#DDA0DD; {outline}'>{m.name}</span>" if m.m_type == "魔法" else f"<span style='color:white; {outline}'>{m.name}</span>"
             st.markdown(f"- **Lv.{m.level:,} {name_display}** ({range_str}/{m.m_type} | {stats_str})", unsafe_allow_html=True)
 
