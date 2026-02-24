@@ -205,6 +205,10 @@ if start_battle or skip_battle:
             # Run simulation steps catch-up (if rendering took time)
             new_logs_this_frame = []
             while field.time_elapsed < elapsed_real_time:
+                # バトル終了条件を満たしたらキャッチアップループを即座に抜ける（無限ループ防止）
+                if field.is_finished():
+                    break
+                    
                 logs = field.step(delta_time=DELTA_TIME)
                 if logs:
                     new_logs_this_frame.extend(logs)
