@@ -150,38 +150,46 @@ if st.button("⚔️ バトル開始！", type="primary"):
     all_logs = []
     
     # Run Simulation Loop
-    step_count = 0
     DELTA_TIME = 0.02   # 0.02秒刻み（高速攻撃の精度を確保）
-    BATTLE_DURATION = 120  # 120秒
-    max_steps = int(BATTLE_DURATION / DELTA_TIME)  # 6000ステップ
-    DISPLAY_INTERVAL = int(1.0 / DELTA_TIME)  # 50ステップ毎（1秒毎）に表示更新
+    BATTLE_DURATION = 40.0  # 現実時間での40秒制限
+    
+    start_time = time.time()
+    last_sim_time = 0.0
+    last_display_time = 0.0
     
     progress_bar = st.progress(0)
     
-    while not field.is_finished() and step_count < max_steps:
-        logs = field.step(delta_time=DELTA_TIME)
-        step_count += 1
+    while not field.is_finished():
+        current_real_time = time.time()
+        elapsed_real_time = current_real_time - start_time
         
-        # update progress bar
-        p = step_count / max_steps
+        if elapsed_real_time >= BATTLE_DURATION:
+            break
+            
+        # Update progress bar
+        p = min(1.0, elapsed_real_time / BATTLE_DURATION)
         progress_bar.progress(p)
         
-        if logs:
-            # Colorize logs
-            colored_logs = []
-            for log in logs:
-                for t, c in team_colors_hex.items():
-                    log = log.replace(f"チーム{t}", colored_text(f"チーム{t}", c))
-                colored_logs.append(log)
-            
-            all_logs.extend(colored_logs)
-            display_logs = "\n".join(all_logs[-10:])
-            # Wrap in HTML to render color spans
-            log_container.markdown(f"<div style='height: 200px; overflow-y: scroll; padding: 10px; border: 1px solid #ddd; border-radius: 5px; background: #262730; color: white;'>{display_logs.replace(chr(10), '<br>')}</div>", unsafe_allow_html=True)
-            
-        # Draw status every DISPLAY_INTERVAL steps (1 second sim time)
-        if step_count % DISPLAY_INTERVAL == 0:
-            time_left = BATTLE_DURATION - field.time_elapsed
+        # Run simulation steps catch-up (if rendering took time)
+        while field.time_elapsed < elapsed_real_time:
+            logs = field.step(delta_time=DELTA_TIME)
+            if logs:
+                # Colorize logs
+                colored_logs = []
+                for log in logs:
+                    for t, c in team_colors_hex.items():
+                        log = log.replace(f"チーム{t}", colored_text(f"チーム{t}", c))
+                    colored_logs.append(log)
+                
+                all_logs.extend(colored_logs)
+                display_logs = "\n".join(all_logs[-10:])
+                # Wrap in HTML to render color spans
+                log_container.markdown(f"<div style='height: 200px; overflow-y: scroll; padding: 10px; border: 1px solid #ddd; border-radius: 5px; background: #262730; color: white;'>{display_logs.replace(chr(10), '<br>')}</div>", unsafe_allow_html=True)
+                
+        # Draw status every 1.0 second of real time
+        if elapsed_real_time - last_display_time >= 1.0:
+            last_display_time = elapsed_real_time
+            time_left = BATTLE_DURATION - elapsed_real_time
             time_color = "red" if time_left <= 10 else "white"
             status_text = f"<h4 style='color:{time_color}'>⏳ 残り時間: {max(0, time_left):.1f}s</h4><br>"
             
@@ -191,7 +199,8 @@ if st.button("⚔️ バトル開始！", type="primary"):
                 status_text += f"<span style='color:{m_color};'>[{m.team}] Lv.{m.level} {m.name}</span> : {state} (x:{m.x:.0f}, y:{m.y:.0f})<br>"
             status_container.markdown(status_text, unsafe_allow_html=True)
             
-            time.sleep(0.05)
+        # Small sleep to prevent freezing the browser/app
+        time.sleep(0.01)
             
     # Final Result
     progress_bar.empty()
