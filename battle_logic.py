@@ -70,9 +70,9 @@ class Monster:
 
     def move_towards(self, target, delta_time):
         if self.mov == 0:
-            speed = 5.0 # Reduced from 10.0
+            speed = 10.0 # Set tiny baseline to 10.0
         else:
-            speed = 50.0 * (1 + self.mov * 0.15) # Reduced from 70.0
+            speed = 80.0 * (1 + self.mov * 0.10) # Set MOV scaling per point to 10%
 
         dist = self.distance_to(target)
         if dist > self.attack_range:
@@ -99,80 +99,85 @@ class Monster:
         
         logs = []
         total_damage = 0
-        for hit in range(self.multi_hit):
-            # Accuracy check
-            hit_chance = 1.0
-            luck_ratio = target.luck / max(1, self.luck)
-            
-            if luck_ratio >= 3.0:
-                hit_chance = 0.01
-            elif luck_ratio <= 0.5:
-                hit_chance = 0.99
-            else:
-                # Linear scale between 0.5 (99%) and 3.0 (1%)
-                # x goes from 0.5 to 3.0 (span 2.5)
-                # y goes from 0.99 down to 0.01
-                hit_chance = 0.99 - ((luck_ratio - 0.5) / 2.5) * 0.98
+        
+        # Accuracy check
+        hit_chance = 1.0
+        luck_ratio = target.luck / max(1, self.luck)
+        
+        if luck_ratio >= 3.0:
+            hit_chance = 0.01
+        elif luck_ratio <= 0.5:
+            hit_chance = 0.99
+        else:
+            # Linear scale between 0.5 (99%) and 3.0 (1%)
+            # x goes from 0.5 to 3.0 (span 2.5)
+            # y goes from 0.99 down to 0.01
+            hit_chance = 0.99 - ((luck_ratio - 0.5) / 2.5) * 0.98
 
-            if random.random() > hit_chance:
-                logs.append(f"{self.name} の攻撃は {target.name} に回避された！")
-                continue
-                
-            # Damage calculation
-            # Elemental multiplier
-            element_mult = 1.0
-            attr = self.element
-            t_attr = target.element
-            if attr == '火':
-                if t_attr == '木': element_mult = 1.2
-                elif t_attr == '水': element_mult = 0.8
-            elif attr == '水':
-                if t_attr == '火': element_mult = 1.2
-                elif t_attr == '木': element_mult = 0.8
-            elif attr == '木':
-                if t_attr == '水': element_mult = 1.2
-                elif t_attr == '火': element_mult = 0.8
-            elif attr == '光' and t_attr == '闇':
-                element_mult = 1.2
-            elif attr == '闇' and t_attr == '光':
-                element_mult = 1.2
-                
-            # Base raw stat vs Defense
-            if self.m_type == '物理':
-                base_dmg = (self.atk * 1.75) - target.defense
-            else:
-                base_dmg = (self.int_stat * 1.75) - target.mdefense
-                
-            if base_dmg < 0:
-                base_dmg = 0
-                
-            # x4 multiplier
-            base_dmg *= 4.0
+        if random.random() > hit_chance:
+            logs.append(f"{self.name} の攻撃は {target.name} に回避された！")
+            return {'target': target, 'total_damage': 0, 'logs': logs}
             
-            # RNG variance 0.9 ~ 1.1
-            rng_mult = random.uniform(0.9, 1.1)
+        # Damage calculation
+        # Elemental multiplier
+        element_mult = 1.0
+        attr = self.element
+        t_attr = target.element
+        if attr == '火':
+            if t_attr == '木': element_mult = 1.2
+            elif t_attr == '水': element_mult = 0.8
+        elif attr == '水':
+            if t_attr == '火': element_mult = 1.2
+            elif t_attr == '木': element_mult = 0.8
+        elif attr == '木':
+            if t_attr == '水': element_mult = 1.2
+            elif t_attr == '火': element_mult = 0.8
+        elif attr == '光':
+            if t_attr == '闇': element_mult = 1.2
+            elif t_attr == '光': element_mult = 0.8
+        elif attr == '闇':
+            if t_attr == '光': element_mult = 1.2
+            elif t_attr == '闇': element_mult = 0.8
             
-            # Critical hit check
-            crit_mult = 1.0
-            is_crit = False
-            luck_diff_ratio = abs(self.luck - target.luck) / max(1, max(self.luck, target.luck))
+        # Base raw stat vs Defense
+        if self.m_type == '物理':
+            base_dmg = (self.atk * 1.75) - target.defense
+        else:
+            base_dmg = (self.int_stat * 1.75) - target.mdefense
             
-            if luck_diff_ratio <= 0.2: # within 20%
-                if random.random() < 0.05: # 5% chance
-                    is_crit = True
-                    crit_mult = 2.5
-                    
-            final_dmg_float = base_dmg * element_mult * rng_mult * crit_mult
-            dmg = int(final_dmg_float)
+        if base_dmg < 0:
+            base_dmg = 0
             
-            if dmg <= 0:
-                dmg = 1
+        # x4 multiplier
+        base_dmg *= 4.0
+        
+        # RNG variance 0.9 ~ 1.1
+        rng_mult = random.uniform(0.9, 1.1)
+        
+        # Critical hit check
+        crit_mult = 1.0
+        is_crit = False
+        luck_diff_ratio = abs(self.luck - target.luck) / max(1, max(self.luck, target.luck))
+        
+        if luck_diff_ratio <= 0.2: # within 20%
+            if random.random() < 0.05: # 5% chance
+                is_crit = True
+                crit_mult = 2.5
                 
-            total_damage += dmg
+        final_dmg_float = base_dmg * element_mult * rng_mult * crit_mult
+        dmg = int(final_dmg_float)
+        
+        if dmg <= 0:
+            dmg = 1
             
-            crit_text = "【クリティカル！】" if is_crit else ""
+        total_damage = dmg * self.multi_hit
+        
+        crit_text = "【クリティカル！】" if is_crit else ""
+        if self.multi_hit > 1:
+            logs.append(f"{self.name} は {target.name} に {crit_text}{dmg}×{self.multi_hit}段={total_damage} のダメージ！")
+        else:
             logs.append(f"{self.name} は {target.name} に {crit_text}{dmg} のダメージ！")
-                
+            
         return {'target': target, 'total_damage': total_damage, 'logs': logs}
 
 class Field:

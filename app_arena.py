@@ -136,22 +136,34 @@ for idx, (t_name, t_list) in enumerate(teams_dict.items()):
             name_display = f"<span style='color:#DDA0DD; {outline}'>{m.name}</span>" if m.m_type == "魔法" else f"<span style='color:white; {outline}'>{m.name}</span>"
             st.markdown(f"- **Lv.{m.level:,} {name_display}** ({range_str}/{m.m_type} | {stats_str})", unsafe_allow_html=True)
 
-# Bet
+# Bet and Speed
 st.write("---")
-bet = st.selectbox("賭けるチームを選んでください", ["A", "B", "C"])
+col_bet, col_speed = st.columns(2)
+with col_bet:
+    bet = st.selectbox("賭けるチームを選んでください", ["A", "B", "C"])
+with col_speed:
+    speed_option = st.selectbox("観戦スピード", ["通常 (1.0x)", "ゆっくり (0.5x)", "スローモーション (0.25x)"])
+    
+speed_multiplier = 1.0
+if "0.5x" in speed_option:
+    speed_multiplier = 0.5
+elif "0.25x" in speed_option:
+    speed_multiplier = 0.25
 
 # Execution
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 with col1:
-    start_battle = st.button("⚔️ バトル開始！ (リアルタイム観戦)", type="primary")
+    start_battle = st.button("💬 バトル開始！ (文字ログ中心)", type="primary")
 with col2:
+    visual_battle = st.button("🗺️ 盤面で観戦 (ビジュアルモード)", type="primary")
+with col3:
     skip_battle = st.button("⏩ 即座に結果を見る (スキップ)", type="secondary")
 
-if start_battle or skip_battle:
+if start_battle or visual_battle or skip_battle:
     
     st.write("---")
     # Countdown limits if live
-    if start_battle:
+    if start_battle or visual_battle:
         countdown_container = st.empty()
         for i in [3, 2, 1]:
             countdown_container.markdown(f"<h1 style='text-align: center; font-size: 80px;'>{i}</h1>", unsafe_allow_html=True)
@@ -192,6 +204,51 @@ if start_battle or skip_battle:
          
     field = Field(battle_teams)
     
+    if visual_battle:
+        board_container = st.empty()
+        
+    def render_board_html(monsters):
+        # 1000x1000の仮想座標を%に変換して描画
+        # 背景の土色を少し暗くし、すべて円形から角丸の正方形に変更
+        board_html = (
+            '<div style="position: relative; width: 100%; max-width: 800px; aspect-ratio: 1; '
+            'background: radial-gradient(circle at center, #B8906B 20%, #8B4513 60%, #654321 100%); '
+            'border: 8px solid #4A3326; '
+            'box-shadow: inset 0 0 50px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.5); '
+            'margin: auto; overflow: hidden; border-radius: 10px;">'
+            '<!-- 闘技場の内側の枠線 -->'
+            '<div style="position: absolute; top: 2%; left: 2%; width: 96%; height: 96%; '
+            'border: 2px dashed rgba(255,255,255,0.2); border-radius: 6px; pointer-events: none;"></div>'
+            '<!-- 中央の高い質感の石タイル -->'
+            '<div style="position: absolute; top: 30%; left: 30%; width: 40%; height: 40%; '
+            'background-color: #696969; '
+            'background-image: '
+            'linear-gradient(335deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 80%), '
+            'radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.2) 100%), '
+            'linear-gradient(90deg, transparent 48px, rgba(0,0,0,0.3) 48px, rgba(0,0,0,0.3) 50px, transparent 50px), '
+            'linear-gradient(0deg, transparent 48px, rgba(0,0,0,0.3) 48px, rgba(0,0,0,0.3) 50px, transparent 50px); '
+            'background-size: 100% 100%, 100% 100%, 50px 50px, 50px 50px; '
+            'border: 6px solid #4f4f4f; '
+            'border-radius: 8px; '
+            'box-shadow: inset 0 0 20px rgba(0,0,0,0.7), 0 0 30px rgba(0,0,0,0.4); '
+            'pointer-events: none; opacity: 0.9;"></div>'
+        )
+        for m in monsters:
+            if m.is_dead:
+                continue
+            x_pct = min(max((m.x) / 1000.0 * 100, 0), 100)
+            y_pct = min(max((m.y) / 1000.0 * 100, 0), 100)
+            
+            color = team_colors_hex.get(m.team, "#FFFFFF")
+            icon = "🗡️" if m.m_type == "物理" else "🎇"
+            board_html += f'<div style="position: absolute; left: {x_pct}%; top: {y_pct}%; transform: translate(-50%, -50%); text-align: center; transition: left 0.1s linear, top 0.1s linear;">'
+            board_html += f'<div style="font-size: 24px; text-shadow: 0 0 5px black;">{icon}</div>'
+            board_html += f'<div style="background-color: {color}; color: white; padding: 2px 4px; border-radius: 4px; font-size: 10px; white-space: nowrap; border: 1px solid white; box-shadow: 1px 1px 3px rgba(0,0,0,0.5);">'
+            board_html += f'{m.name}<br>{m.hp}'
+            board_html += '</div></div>'
+        board_html += '</div>'
+        return board_html
+
     log_container = st.empty()
     status_container = st.empty()
     
@@ -201,6 +258,21 @@ if start_battle or skip_battle:
     DELTA_TIME = 0.02   # 0.02秒刻み（高速攻撃の精度を確保）
     BATTLE_DURATION = 40.0  # 現実時間（およびシミュ内時間）での40秒制限
     
+    # ====== 初期の盤面とステータスを1秒間表示（非戦闘状態で配置確認） ======
+    if not skip_battle:
+        if visual_battle:
+            board_container.markdown(render_board_html(field.monsters), unsafe_allow_html=True)
+            
+        status_text = f"<h4>🏁 バトル開始直前... 配置確認中</h4><br>"
+        for m in field.monsters:
+            m_color = team_colors_hex[m.team]
+            state = f"❤️ {m.hp:,}/{m.max_hp:,}"
+            status_text += f"<span style='color:{m_color};'>[{m.team}] Lv.{m.level:,} {m.name}</span> : {state} (x:{m.x:.0f}, y:{m.y:.0f})<br>"
+        status_container.markdown(status_text, unsafe_allow_html=True)
+        
+        time.sleep(1.0) # 1秒間の配置確認タイム
+    # =========================================================================
+
     start_time = time.time()
     last_display_time = 0.0
     
@@ -232,20 +304,25 @@ if start_battle or skip_battle:
         while not field.is_finished():
             current_real_time = time.time()
             elapsed_real_time = current_real_time - start_time
+            elapsed_sim_time = elapsed_real_time * speed_multiplier
             
-            if elapsed_real_time >= BATTLE_DURATION:
+            if elapsed_sim_time >= BATTLE_DURATION:
                 is_timeout = True
                 break
                 
-            # Update progress bar (Throttled to 10 FPS to prevent ST WebSocket freeze)
+            # Update progress bar based on simulation time
             if elapsed_real_time - last_progress_time >= 0.1:
                 last_progress_time = elapsed_real_time
-                p = min(1.0, elapsed_real_time / BATTLE_DURATION)
+                p = min(1.0, elapsed_sim_time / BATTLE_DURATION)
                 progress_bar.progress(p)
+                
+                # 盤面の更新 (10FPS)
+                if visual_battle:
+                    board_container.markdown(render_board_html(field.monsters), unsafe_allow_html=True)
             
-            # Run simulation steps catch-up (if rendering took time)
+            # Run simulation steps catch-up using simulation time factor
             new_logs_this_frame = []
-            while field.time_elapsed < elapsed_real_time:
+            while field.time_elapsed < elapsed_sim_time:
                 # バトル終了条件を満たしたらキャッチアップループを即座に抜ける（無限ループ防止）
                 if field.is_finished():
                     break
@@ -273,7 +350,7 @@ if start_battle or skip_battle:
                     log_container.markdown(f"<div style='height: 200px; overflow-y: scroll; padding: 10px; border: 1px solid #ddd; border-radius: 5px; background: #262730; color: white;'>{display_logs.replace(chr(10), '<br>')}</div>", unsafe_allow_html=True)
 
                 # Update visual stats
-                time_left = BATTLE_DURATION - elapsed_real_time
+                time_left = BATTLE_DURATION - elapsed_sim_time
                 time_color = "red" if time_left <= 10 else "white"
                 status_text = f"<h4 style='color:{time_color}'>⏳ 残り時間: {max(0, time_left):.1f}s</h4><br>"
                 
@@ -287,11 +364,14 @@ if start_battle or skip_battle:
             time.sleep(0.01)
             
     # ====== FINAL RENDER (Ensure last hits and surviving team HP are shown) ======
+    if visual_battle:
+        board_container.markdown(render_board_html(field.monsters), unsafe_allow_html=True)
+
     if all_logs:
         display_logs = "\n".join(all_logs[-15:])
         log_container.markdown(f"<div style='height: 200px; overflow-y: scroll; padding: 10px; border: 1px solid #ddd; border-radius: 5px; background: #262730; color: white;'>{display_logs.replace(chr(10), '<br>')}</div>", unsafe_allow_html=True)
 
-    time_left = BATTLE_DURATION - elapsed_real_time
+    time_left = BATTLE_DURATION - elapsed_sim_time
     time_color = "red" if time_left <= 10 else "white"
     status_text = f"<h4 style='color:{time_color}'>⏳ 残り時間: {max(0, time_left):.1f}s (決着)</h4><br>"
     for m in field.monsters:
