@@ -325,7 +325,7 @@ if start_battle or visual_battle or skip_battle:
     DELTA_TIME = 0.02   # 0.02秒刻み（高速攻撃の精度を確保）
     BATTLE_DURATION = 40.0  # 現実時間（およびシミュ内時間）での40秒制限
     
-    # ====== 初期の盤面とステータスを1秒間表示（非戦闘状態で配置確認） ======
+    # ====== 初期の盤面とステータスを2秒間表示（非戦闘状態で配置確認） ======
     if not skip_battle:
         if visual_battle:
             board_container.markdown(render_board_html(field.monsters), unsafe_allow_html=True)
@@ -337,7 +337,7 @@ if start_battle or visual_battle or skip_battle:
             status_text += f"<span style='color:{m_color};'>[{m.team}] Lv.{m.level:,} {m.name}</span> : {state} (x:{m.x:.0f}, y:{m.y:.0f})<br>"
         status_container.markdown(status_text, unsafe_allow_html=True)
         
-        time.sleep(1.0) # 1秒間の配置確認タイム
+        time.sleep(2.0) # 2秒間の配置確認タイム
     # =========================================================================
 
     start_time = time.time()
