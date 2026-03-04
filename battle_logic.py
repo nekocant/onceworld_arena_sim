@@ -37,33 +37,72 @@ class Monster:
         
         # Attack speed logic
         self.attack_interval, self.multi_hit = self._calculate_attack_speed()
-        self.attack_range = 30.0 if self.range_type == "近接" else 100.0
+        self.attack_range = 30.0 if self.range_type == "近接" else 150.0
         
         # Target lock
         self.current_target = None
 
     def _calculate_attack_speed(self):
-        # returns (interval_seconds, max_hits)
-        hits = 1
-        if self.spd >= 100000:
-            hits = 5
-            atk_spd = 20.0
-        elif self.spd >= 30000:
-            hits = 4
-            atk_spd = 20.0
-        elif self.spd >= 10000:
-            hits = 3
-            atk_spd = 20.0
-        elif self.spd >= 3001:
-            hits = 2
-            atk_spd = 20.0
+        # returns (interval_seconds, max_hits_per_interval)
+        # Based on user data: SPD -> Attacks per Second
+        points = [
+            (0, 1.0),
+            (100, 1.5),
+            (200, 2.0),
+            (300, 2.5),
+            (400, 3.0),
+            (500, 3.5),
+            (600, 4.0),
+            (700, 4.5),
+            (800, 5.0),
+            (3000, 20.0)
+        ]
+        
+        # Calculate interpolated atk_spd
+        if self.spd <= 0:
+            atk_spd = 1.0
+        elif self.spd >= 3000:
+            # 3000以上は従来通りさらに多段ヒット強化
+            base_hits = 20.0
+            extra_multiplier = 1.0
+            if self.spd >= 100000:
+                extra_multiplier = 5.0
+            elif self.spd >= 30000:
+                extra_multiplier = 4.0
+            elif self.spd >= 10000:
+                extra_multiplier = 3.0
+            elif self.spd >= 3001:
+                extra_multiplier = 2.0
+            atk_spd = base_hits * extra_multiplier
         else:
-            # 1 to 3000 -> scales to 20 attacks per second
-            spd_clamped = max(1, self.spd)
-            atk_spd = (spd_clamped / 3000.0) * 20.0
+            # Piecewise linear interpolation (smooth curve approximation)
+            atk_spd = 1.0
+            for i in range(len(points) - 1):
+                x1, y1 = points[i]
+                x2, y2 = points[i+1]
+                if x1 <= self.spd <= x2:
+                    # Linear interpolation
+                    atk_spd = y1 + ((self.spd - x1) / (x2 - x1)) * (y2 - y1)
+                    break
+                    
+        # インターバル（モーション間隔）を自然に細かく分散させる
+        # 最大でも 0.25秒に1回（1秒に4回）は動くようにして、カクカク感をなくす
+        # 秒間攻撃回数がそれより大きい場合（例：10回/s）、実際には0.1秒間隔で動く
+        interval_raw = 1.0 / atk_spd
+        target_interval = min(0.25, interval_raw) # 0.25秒より遅くはならない、速い分にはその速度になる
+        
+        # もし 0.25秒間隔にする場合、元の秒間攻撃回数（atk_spd）が例えば 1.5 だったとすると
+        # 1回行動あたりの「期待ヒット数」は 1.5 * 0.25 = 0.375 回となる
+        hits_per_action = atk_spd * target_interval
+        
+        base_hits = int(hits_per_action)
+        rem = hits_per_action - base_hits
+        if random.random() < rem:
+            hits = base_hits + 1
+        else:
+            hits = base_hits
             
-        interval = max(0.05, 1.0 / atk_spd) if atk_spd > 0 else 1.0
-        return interval, hits
+        return target_interval, hits
 
     def distance_to(self, other):
         return math.hypot(self.x - other.x, self.y - other.y)
@@ -77,19 +116,16 @@ class Monster:
         dist = self.distance_to(target)
         if dist > self.attack_range:
             step = speed * delta_time
-            if step > dist - self.attack_range:
-                # 浮動小数点の誤差対策: ピタリと止まると誤差で「射程外」判定になるため 0.1 だけ食い込ませる
-                step = (dist - self.attack_range) + 0.1
+            
+            # 射程距離にピッタリ収まるように進む距離を調整（jitter & teleport 防止）
+            if dist - step < self.attack_range:
+                step = dist - self.attack_range
                 
-            # Prevent division by zero if they are exactly on top of each other
-            safe_dist = max(1.0, dist)
+            # 直線距離が0になる異常事態を防ぐ
+            safe_dist = max(0.001, dist)
             dx = (target.x - self.x) / safe_dist
             dy = (target.y - self.y) / safe_dist
             
-            # If they are exactly on the same spot, just move them slightly apart
-            if dist == 0:
-                dx, dy = 1.0, 0.0
-                
             self.x += dx * step
             self.y += dy * step
             
@@ -104,15 +140,32 @@ class Monster:
         hit_chance = 1.0
         luck_ratio = target.luck / max(1, self.luck)
         
-        if luck_ratio >= 3.0:
-            hit_chance = 0.01
-        elif luck_ratio <= 0.5:
-            hit_chance = 0.99
+        # Piercewise linear interpolation for hit chance based on new data
+        # (luck_ratio, return hit_chance representing fraction e.g. 0.99 for 99%)
+        points = [
+            (1.0, 0.99),
+            (2.0, 0.434),
+            (3.0, 0.046),
+            (3.45, 0.023),
+            (3.69, 0.021),
+            (3.78, 0.019),
+            (3.9, 0.0147),
+            (4.0, 0.01)
+        ]
+        
+        if luck_ratio >= 4.0:
+            hit_chance = 0.01 # Max 4.0 -> 1%
+        elif luck_ratio <= 1.0:
+            hit_chance = 0.99 # Equal or lower luck -> 99%
         else:
-            # Linear scale between 0.5 (99%) and 3.0 (1%)
-            # x goes from 0.5 to 3.0 (span 2.5)
-            # y goes from 0.99 down to 0.01
-            hit_chance = 0.99 - ((luck_ratio - 0.5) / 2.5) * 0.98
+            # Interpolate smoothly between data points
+            for i in range(len(points) - 1):
+                x1, y1 = points[i]
+                x2, y2 = points[i+1]
+                if x1 <= luck_ratio <= x2:
+                    # Linear interpolation formula: y = y1 + ((x - x1) / (x2 - x1)) * (y2 - y1)
+                    hit_chance = y1 + ((luck_ratio - x1) / (x2 - x1)) * (y2 - y1)
+                    break
 
         if random.random() > hit_chance:
             logs.append(f"{self.name} の攻撃は {target.name} に回避された！")
@@ -205,12 +258,12 @@ class Field:
         # まず全モンスターのターゲット選定と移動先を確定させる
         for m in living_monsters:
             # ターゲットが死んだか、未設定なら新しいターゲットを探す
-            if m.current_target is None or m.current_target.is_dead:
+            if m.current_target is None or getattr(m.current_target, 'is_dead', True):
                 nearest_enemy = None
                 min_dist = float('inf')
                 
                 for enemy in living_monsters:
-                    if enemy.team == m.team:
+                    if enemy.team == m.team or m == enemy:
                         continue
                     dist = m.distance_to(enemy)
                     if dist < min_dist:
@@ -227,23 +280,23 @@ class Field:
             # ロックオンしたターゲットとの距離を測る
             dist = m.distance_to(m.current_target)
             
-            # 射程外なら常に接近する（浮動小数点の誤差を考慮し +0.1 のバッファ）
-            if dist > m.attack_range + 0.1:
+            # 射程外なら接近する
+            if dist > m.attack_range:
                 m.move_towards(m.current_target, delta_time)
                 
         # ===== Phase 2: 攻撃フェーズ =====
         # 全員が移動を終えた後の「最終的な距離」をもとに攻撃判定を行う
         pending_attacks = []
         for m in living_monsters:
-            if not m.current_target or m.current_target.is_dead:
+            if not m.current_target or getattr(m.current_target, 'is_dead', True):
                 continue
                 
             # 移動後の最新座標でロックオンしたターゲットとの距離を再計算
             dist = m.distance_to(m.current_target)
                 
             # 新しい距離が射程内で、かつクールダウンが完了していれば攻撃
-            # ※浮動小数点演算の誤差を許容するため +0.1 のバッファを設ける
-            if dist <= m.attack_range + 0.1 and m.cooldown <= 0:
+            # ※浮動小数点演算の極小の誤差を許容するため +0.001 のバッファ
+            if dist <= m.attack_range + 0.001 and m.cooldown <= 0:
                 attack_result = m.attack(m.current_target)
                 pending_attacks.append(attack_result)
         

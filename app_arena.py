@@ -162,6 +162,7 @@ with col3:
 if start_battle or visual_battle or skip_battle:
     
     st.write("---")
+    
     # Countdown limits if live
     if start_battle or visual_battle:
         countdown_container = st.empty()
@@ -174,11 +175,54 @@ if start_battle or visual_battle or skip_battle:
         st.toast("シミュレーションを高速処理中...", icon="⏩")
 
     
+    # これを盤面タイトルよりさらに上に配置し、スクロールの目標地点にする
+    st.markdown("<div id='battle-board-anchor' style='height: 50px;'></div>", unsafe_allow_html=True)
+    
     st.markdown("#### 🏁 バトルログ")
+    
+    # --- Auto-Scroll script (More robust version for Streamlit iframe) ---
+    import streamlit.components.v1 as components
+    components.html(
+        """
+        <script>
+            setTimeout(function() {
+                var parentDoc = window.parent.document;
+                
+                // Streamlitの実際のスクロール可能コンテナを探す
+                var scrollContainer = parentDoc.querySelector('[data-testid="stMain"]') || 
+                                      parentDoc.querySelector('[data-testid="stAppViewContainer"]') || 
+                                      parentDoc.querySelector('.main') || 
+                                      parentDoc.body;
+                                      
+                // 対象のアンカーへスクロール
+                var target = parentDoc.getElementById("battle-board-anchor");
+                if (target && scrollContainer) {
+                    // targetのトップ座標 - 画面上部から少し余裕を持たせる（100px）
+                    var targetRect = target.getBoundingClientRect();
+                    var containerRect = scrollContainer.getBoundingClientRect();
+                    var scrollPos = scrollContainer.scrollTop + (targetRect.top - containerRect.top) - 80;
+                    
+                    scrollContainer.scrollTo({top: scrollPos, behavior: 'smooth'});
+                } else if (target) {
+                    target.scrollIntoView({behavior: "smooth", block: "start"});
+                } else {
+                    // 見つからない場合はコンテナを一番下へ
+                    if (scrollContainer) {
+                        scrollContainer.scrollTo({top: scrollContainer.scrollHeight, behavior: 'smooth'});
+                    } else {
+                        window.parent.window.scrollTo({top: parentDoc.body.scrollHeight, behavior: 'smooth'});
+                    }
+                }
+            }, 100); // 描画直後に実行
+        </script>
+        """,
+        height=0
+    )
     
     import copy
     
     battle_teams = {"A": [], "B": [], "C": []}
+    all_placed = []
     
     # Starting positions (shrunk to make field smaller)
     positions = {
@@ -191,10 +235,32 @@ if start_battle or visual_battle or skip_battle:
         base_x, base_y = positions[t_name]
         for i, m in enumerate(t_list):
             new_m = create_monster(t_name, m.no, m.level)
-            # Scatter coordinates slightly more to prevent instant cluster clashing
-            new_m.x = base_x + random.randint(-250, 250)
-            new_m.y = base_y + random.randint(-250, 250)
+            # Scatter coordinates slightly more and prevent overlapping
+            for _ in range(100):
+                nx = base_x + random.randint(-350, 350)
+                ny = base_y + random.randint(-350, 350)
+                
+                # Keep within bounds (0-1000)
+                nx = max(50, min(950, nx))
+                ny = max(50, min(950, ny))
+                
+                overlap = False
+                for placed_m in all_placed:
+                    dist = math.hypot(nx - placed_m.x, ny - placed_m.y)
+                    if dist < 80.0:
+                        overlap = True
+                        break
+                
+                if not overlap:
+                    new_m.x = nx
+                    new_m.y = ny
+                    break
+            else:
+                new_m.x = nx
+                new_m.y = ny
+                
             battle_teams[t_name].append(new_m)
+            all_placed.append(new_m)
             
     # Check if teams are valid before starting
     has_empty_team = any(len(t) == 0 for t in battle_teams.values())
@@ -234,17 +300,18 @@ if start_battle or visual_battle or skip_battle:
             'pointer-events: none; opacity: 0.9;"></div>'
         )
         for m in monsters:
-            if m.is_dead:
-                continue
+            opacity = "0" if m.is_dead else "1"
+            pointer_ev = "none" if m.is_dead else "auto"
+            
             x_pct = min(max((m.x) / 1000.0 * 100, 0), 100)
             y_pct = min(max((m.y) / 1000.0 * 100, 0), 100)
             
             color = team_colors_hex.get(m.team, "#FFFFFF")
             icon = "🗡️" if m.m_type == "物理" else "🎇"
-            board_html += f'<div style="position: absolute; left: {x_pct}%; top: {y_pct}%; transform: translate(-50%, -50%); text-align: center; transition: left 0.1s linear, top 0.1s linear;">'
+            board_html += f'<div style="position: absolute; left: {x_pct}%; top: {y_pct}%; transform: translate(-50%, -50%); text-align: center; transition: left 0.1s linear, top 0.1s linear; opacity: {opacity}; pointer-events: {pointer_ev};">'
             board_html += f'<div style="font-size: 24px; text-shadow: 0 0 5px black;">{icon}</div>'
             board_html += f'<div style="background-color: {color}; color: white; padding: 2px 4px; border-radius: 4px; font-size: 10px; white-space: nowrap; border: 1px solid white; box-shadow: 1px 1px 3px rgba(0,0,0,0.5);">'
-            board_html += f'{m.name}<br>{m.hp}'
+            board_html += f'{m.name}<br>{max(0, m.hp)}'
             board_html += '</div></div>'
         board_html += '</div>'
         return board_html
