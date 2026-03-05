@@ -51,9 +51,11 @@ def init_random_team(team_name):
         team.append(create_monster(team_name, m_no, level))
     return team
 
-
 st.markdown("### ⚔️ OnceWorld アリーナ勝敗予想シミュレーター")
 
+# Hit Counter Badge (Tracking starts automatically based on the URL)
+badge_url = "https://komarev.com/ghpvc/?username=onceworld-arena&label=VIEWS&color=green&style=flat"
+st.markdown(f'<img src="{badge_url}" alt="Hits">', unsafe_allow_html=True)
 # --- UI Setup ---
 mode = st.radio("選出モード", ["ランダム選出", "手動選出"], horizontal=True)
 
