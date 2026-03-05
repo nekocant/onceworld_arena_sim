@@ -1,5 +1,6 @@
 import math
 import random
+from formulas import *
 
 class Monster:
     def __init__(self, t_name, base_data, level=1):
@@ -12,22 +13,22 @@ class Monster:
         self.level = level
         
         # Calculate stats
-        lv_multiplier = 1 + self.level * 0.1
-        self.vit = int(base_data['VIT'] * lv_multiplier)
-        self.hp = self.vit * 18 + 100
+        lv_multiplier = LV_BASE + (self.level - 1) * LV_SCALE
+        self.vit = math.floor(base_data['VIT'] * lv_multiplier)
+        self.hp = math.floor(self.vit * HP_VIT_COEFFICIENT + HP_BASE)
         self.max_hp = self.hp
         
-        self.spd = int(base_data['SPD'] * lv_multiplier)
-        self.atk = int(base_data['ATK'] * lv_multiplier)
-        self.int_stat = int(base_data['INT'] * lv_multiplier)
+        self.spd = math.floor(base_data['SPD'] * lv_multiplier)
+        self.atk = math.floor(base_data['ATK'] * lv_multiplier)
+        self.int_stat = math.floor(base_data['INT'] * lv_multiplier)
         
-        base_def = int(base_data['DEF'] * lv_multiplier)
-        base_mdef = int(base_data['MDEF'] * lv_multiplier)
-        self.defense = int(base_def + base_mdef / 10)
-        self.mdefense = int(base_mdef + base_def / 10)
+        base_def = math.floor(base_data['DEF'] * lv_multiplier)
+        base_mdef = math.floor(base_data['MDEF'] * lv_multiplier)
+        self.defense = math.floor(base_def + base_mdef * DEF_CROSS_RATIO)
+        self.mdefense = math.floor(base_mdef + base_def * MDEF_CROSS_RATIO)
         
-        self.luck = int(base_data['LUCK'] * lv_multiplier)
-        self.mov = int(base_data['MOV']) # Fixed value
+        self.luck = math.floor(base_data['LUCK'] * lv_multiplier)
+        self.mov = math.floor(base_data['MOV']) # Fixed value
         
         # Battle states
         self.x = 0.0
@@ -37,7 +38,7 @@ class Monster:
         
         # Attack speed logic
         self.attack_interval, self.multi_hit = self._calculate_attack_speed()
-        self.attack_range = 30.0 if self.range_type == "近接" else 150.0
+        self.attack_range = RANGE_MELEE if self.range_type == "近接" else RANGE_RANGED
         
         # Target lock
         self.current_target = None
@@ -45,38 +46,22 @@ class Monster:
     def _calculate_attack_speed(self):
         # returns (interval_seconds, max_hits_per_interval)
         # Based on user data: SPD -> Attacks per Second
-        points = [
-            (0, 1.0),
-            (100, 1.5),
-            (200, 2.0),
-            (300, 2.5),
-            (400, 3.0),
-            (500, 3.5),
-            (600, 4.0),
-            (700, 4.5),
-            (800, 5.0),
-            (3000, 20.0)
-        ]
+        points = ATK_SPEED_TABLE
         
         # Calculate interpolated atk_spd
         if self.spd <= 0:
-            atk_spd = 1.0
-        elif self.spd >= 3000:
-            # 3000以上は従来通りさらに多段ヒット強化
-            base_hits = 20.0
+            atk_spd = points[0][1]
+        elif self.spd >= points[-1][0]:
+            # 超高速域の追加倍率
             extra_multiplier = 1.0
-            if self.spd >= 100000:
-                extra_multiplier = 5.0
-            elif self.spd >= 30000:
-                extra_multiplier = 4.0
-            elif self.spd >= 10000:
-                extra_multiplier = 3.0
-            elif self.spd >= 3001:
-                extra_multiplier = 2.0
-            atk_spd = base_hits * extra_multiplier
+            for threshold, mult in ATK_SPEED_ULTRA_TIERS:
+                if self.spd >= threshold:
+                    extra_multiplier = mult
+                    break
+            atk_spd = ATK_SPEED_ULTRA_BASE * extra_multiplier
         else:
             # Piecewise linear interpolation (smooth curve approximation)
-            atk_spd = 1.0
+            atk_spd = points[0][1]
             for i in range(len(points) - 1):
                 x1, y1 = points[i]
                 x2, y2 = points[i+1]
@@ -86,13 +71,10 @@ class Monster:
                     break
                     
         # インターバル（モーション間隔）を自然に細かく分散させる
-        # 最大でも 0.25秒に1回（1秒に4回）は動くようにして、カクカク感をなくす
-        # 秒間攻撃回数がそれより大きい場合（例：10回/s）、実際には0.1秒間隔で動く
         interval_raw = 1.0 / atk_spd
-        target_interval = min(0.25, interval_raw) # 0.25秒より遅くはならない、速い分にはその速度になる
+        target_interval = min(ATK_INTERVAL_MAX, interval_raw)
         
-        # もし 0.25秒間隔にする場合、元の秒間攻撃回数（atk_spd）が例えば 1.5 だったとすると
-        # 1回行動あたりの「期待ヒット数」は 1.5 * 0.25 = 0.375 回となる
+        # 1回行動あたりの「期待ヒット数」
         hits_per_action = atk_spd * target_interval
         
         base_hits = int(hits_per_action)
@@ -109,9 +91,9 @@ class Monster:
 
     def move_towards(self, target, delta_time):
         if self.mov == 0:
-            speed = 10.0 # Set tiny baseline to 10.0
+            speed = MOV_ZERO_SPEED
         else:
-            speed = 80.0 * (1 + self.mov * 0.10) # Set MOV scaling per point to 10%
+            speed = MOV_BASE_SPEED * (1 + self.mov * MOV_SCALE_PER_POINT)
 
         dist = self.distance_to(target)
         if dist > self.attack_range:
@@ -137,33 +119,22 @@ class Monster:
         total_damage = 0
         
         # Accuracy check
-        hit_chance = 1.0
+        hit_chance = HIT_CHANCE_MAX
         luck_ratio = target.luck / max(1, self.luck)
         
-        # Piercewise linear interpolation for hit chance based on new data
-        # (luck_ratio, return hit_chance representing fraction e.g. 0.99 for 99%)
-        points = [
-            (1.0, 0.99),
-            (2.0, 0.434),
-            (3.0, 0.046),
-            (3.45, 0.023),
-            (3.69, 0.021),
-            (3.78, 0.019),
-            (3.9, 0.0147),
-            (4.0, 0.01)
-        ]
+        # Piercewise linear interpolation for hit chance
+        points = HIT_CHANCE_TABLE
         
-        if luck_ratio >= 4.0:
-            hit_chance = 0.01 # Max 4.0 -> 1%
-        elif luck_ratio <= 1.0:
-            hit_chance = 0.99 # Equal or lower luck -> 99%
+        if luck_ratio >= points[-1][0]:
+            hit_chance = HIT_CHANCE_MIN
+        elif luck_ratio <= points[0][0]:
+            hit_chance = HIT_CHANCE_MAX
         else:
             # Interpolate smoothly between data points
             for i in range(len(points) - 1):
                 x1, y1 = points[i]
                 x2, y2 = points[i+1]
                 if x1 <= luck_ratio <= x2:
-                    # Linear interpolation formula: y = y1 + ((x - x1) / (x2 - x1)) * (y2 - y1)
                     hit_chance = y1 + ((luck_ratio - x1) / (x2 - x1)) * (y2 - y1)
                     break
 
@@ -173,55 +144,38 @@ class Monster:
             
         # Damage calculation
         # Elemental multiplier
-        element_mult = 1.0
-        attr = self.element
-        t_attr = target.element
-        if attr == '火':
-            if t_attr == '木': element_mult = 1.2
-            elif t_attr == '水': element_mult = 0.8
-        elif attr == '水':
-            if t_attr == '火': element_mult = 1.2
-            elif t_attr == '木': element_mult = 0.8
-        elif attr == '木':
-            if t_attr == '水': element_mult = 1.2
-            elif t_attr == '火': element_mult = 0.8
-        elif attr == '光':
-            if t_attr == '闇': element_mult = 1.2
-            elif t_attr == '光': element_mult = 0.8
-        elif attr == '闇':
-            if t_attr == '光': element_mult = 1.2
-            elif t_attr == '闇': element_mult = 0.8
+        element_mult = ELEMENT_TABLE.get(self.element, {}).get(target.element, ELEMENT_DEFAULT)
             
         # Base raw stat vs Defense
         if self.m_type == '物理':
-            base_dmg = (self.atk * 1.75) - target.defense
+            base_dmg = (self.atk * DMG_STAT_MULTIPLIER) - target.defense
         else:
-            base_dmg = (self.int_stat * 1.75) - target.mdefense
+            base_dmg = (self.int_stat * DMG_STAT_MULTIPLIER) - target.mdefense
             
         if base_dmg < 0:
             base_dmg = 0
             
-        # x4 multiplier
-        base_dmg *= 4.0
+        # Final multiplier
+        base_dmg *= DMG_FINAL_MULTIPLIER
         
-        # RNG variance 0.9 ~ 1.1
-        rng_mult = random.uniform(0.9, 1.1)
+        # RNG variance
+        rng_mult = random.uniform(DMG_RNG_MIN, DMG_RNG_MAX)
         
         # Critical hit check
         crit_mult = 1.0
         is_crit = False
         luck_diff_ratio = abs(self.luck - target.luck) / max(1, max(self.luck, target.luck))
         
-        if luck_diff_ratio <= 0.2: # within 20%
-            if random.random() < 0.05: # 5% chance
+        if luck_diff_ratio <= CRIT_LUCK_THRESHOLD:
+            if random.random() < CRIT_CHANCE:
                 is_crit = True
-                crit_mult = 2.5
+                crit_mult = CRIT_MULTIPLIER
                 
         final_dmg_float = base_dmg * element_mult * rng_mult * crit_mult
-        dmg = int(final_dmg_float)
+        dmg = math.floor(final_dmg_float)
         
         if dmg <= 0:
-            dmg = 1
+            dmg = DMG_MINIMUM
             
         total_damage = dmg * self.multi_hit
         
