@@ -85,24 +85,21 @@ class Monster:
                     atk_spd = y1 + ((self.spd - x1) / (x2 - x1)) * (y2 - y1)
                     break
                     
-        # インターバル（モーション間隔）を自然に細かく分散させる
-        # 最大でも 0.25秒に1回（1秒に4回）は動くようにして、カクカク感をなくす
-        # 秒間攻撃回数がそれより大きい場合（例：10回/s）、実際には0.1秒間隔で動く
-        interval_raw = 1.0 / atk_spd
-        target_interval = min(0.25, interval_raw) # 0.25秒より遅くはならない、速い分にはその速度になる
+        # 秒間攻撃回数を切り捨てで整数化（例: 1.7回/s → 1回, 2.0回/s → 2回）
+        hits_per_second = max(1, int(atk_spd))
         
-        # もし 0.25秒間隔にする場合、元の秒間攻撃回数（atk_spd）が例えば 1.5 だったとすると
-        # 1回行動あたりの「期待ヒット数」は 1.5 * 0.25 = 0.375 回となる
-        hits_per_action = atk_spd * target_interval
-        
-        base_hits = int(hits_per_action)
-        rem = hits_per_action - base_hits
-        if random.random() < rem:
-            hits = base_hits + 1
+        # 高速モンスターはアニメーション用に多段ヒットでまとめる（最大間隔0.25s）
+        if hits_per_second <= 4:
+            # 4回/s以下は1回ずつ攻撃
+            interval = 1.0 / hits_per_second
+            multi_hit = 1
         else:
-            hits = base_hits
+            # 5回/s以上は0.25s間隔でまとめて攻撃
+            interval = 0.25
+            actions_per_second = 4  # 1.0 / 0.25
+            multi_hit = max(1, hits_per_second // actions_per_second)
             
-        return target_interval, hits
+        return interval, multi_hit
 
     def distance_to(self, other):
         return math.hypot(self.x - other.x, self.y - other.y)
@@ -229,7 +226,7 @@ class Monster:
         if self.multi_hit > 1:
             logs.append(f"{self.name} は {target.name} に {crit_text}{dmg}×{self.multi_hit}段={total_damage} のダメージ！")
         else:
-            logs.append(f"{self.name} は {target.name} に {crit_text}{dmg} のダメージ！")
+            logs.append(f"{self.name} は {target.name} に {crit_text}{total_damage} のダメージ！")
             
         return {'target': target, 'total_damage': total_damage, 'logs': logs}
 
