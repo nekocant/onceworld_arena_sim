@@ -51,6 +51,7 @@ def init_random_team(team_name):
         team.append(create_monster(team_name, m_no, level))
     return team
 
+
 st.markdown("### ⚔️ OnceWorld アリーナ勝敗予想シミュレーター")
 
 # --- UI Setup ---
@@ -77,15 +78,23 @@ if mode == "ランダム選出":
     
 else:
     # Manual mode
-    cols = st.columns(3)
     monster_options = df['NO.'].astype(str) + " - " + df['ペット名']
     
+
+    cols = st.columns(3)
+    
     for idx, team_letter in enumerate(["A", "B", "C"]):
+        if f"num_{team_letter}" not in st.session_state:
+            st.session_state[f"num_{team_letter}"] = 1
+            
         with cols[idx]:
             st.subheader(f"チーム {team_letter}")
-            num_mons = st.number_input(f"チーム{team_letter}のモンスター数", min_value=1, max_value=4, value=1, key=f"num_{team_letter}")
+            num_mons = st.number_input(f"チーム{team_letter}のモンスター数", min_value=1, max_value=4, key=f"num_{team_letter}")
             
             for i in range(num_mons):
+                if f"lv_{team_letter}_{i}" not in st.session_state:
+                    st.session_state[f"lv_{team_letter}_{i}"] = 100
+                    
                 st.markdown(f"**モンスター {i+1}**")
                 search_term = st.text_input("検索", key=f"search_{team_letter}_{i}")
                 
@@ -98,7 +107,7 @@ else:
                         
                 sel_m = st.selectbox(f"種類", filtered_options, key=f"m_{team_letter}_{i}")
                 sel_no = int(sel_m.split(" - ")[0])
-                lv = st.number_input("レベル", min_value=1, max_value=1100, value=100, step=1, key=f"lv_{team_letter}_{i}")
+                lv = st.number_input("レベル", min_value=1, max_value=1100, step=1, key=f"lv_{team_letter}_{i}")
                 
                 # We instantiate and add right away, but prevent duplicates
                 is_duplicate = any(existing_m.no == sel_no for existing_m in teams_dict[team_letter])
@@ -363,6 +372,7 @@ if start_battle or visual_battle or skip_battle:
         # Determine if it was a timeout in simulation
         is_timeout = field.time_elapsed >= BATTLE_DURATION
         elapsed_real_time = field.time_elapsed # For output logic later
+        elapsed_sim_time = field.time_elapsed  # Needed by the final status display block
         
     else:
         # Live battle viewer
