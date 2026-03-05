@@ -149,12 +149,11 @@ class Monster:
         logs = []
         total_damage = 0
         
-        # Accuracy check
+        # Accuracy: 命中率を算出（各ヒットで個別判定する）
         hit_chance = 1.0
         luck_ratio = target.luck / max(1, self.luck)
         
         # Piercewise linear interpolation for hit chance based on new data
-        # (luck_ratio, return hit_chance representing fraction e.g. 0.99 for 99%)
         points = [
             (1.0, 0.99),
             (2.0, 0.434),
@@ -167,23 +166,17 @@ class Monster:
         ]
         
         if luck_ratio >= 4.0:
-            hit_chance = 0.01 # Max 4.0 -> 1%
+            hit_chance = 0.01
         elif luck_ratio <= 1.0:
-            hit_chance = 0.99 # Equal or lower luck -> 99%
+            hit_chance = 0.99
         else:
-            # Interpolate smoothly between data points
             for i in range(len(points) - 1):
                 x1, y1 = points[i]
                 x2, y2 = points[i+1]
                 if x1 <= luck_ratio <= x2:
-                    # Linear interpolation formula: y = y1 + ((x - x1) / (x2 - x1)) * (y2 - y1)
                     hit_chance = y1 + ((luck_ratio - x1) / (x2 - x1)) * (y2 - y1)
                     break
 
-        if random.random() > hit_chance:
-            logs.append(f"{self.name} の攻撃は {target.name} に回避された！")
-            return {'target': target, 'total_damage': 0, 'logs': logs}
-            
         # Damage calculation
         # Elemental multiplier
         element_mult = 1.0
@@ -225,8 +218,8 @@ class Monster:
         is_crit = False
         luck_diff_ratio = abs(self.luck - target.luck) / max(1, max(self.luck, target.luck))
         
-        if luck_diff_ratio <= 0.2: # within 20%
-            if random.random() < 0.05: # 5% chance
+        if luck_diff_ratio <= 0.2:
+            if random.random() < 0.05:
                 is_crit = True
                 crit_mult = 2.5
                 
@@ -236,15 +229,24 @@ class Monster:
         if dmg <= 0:
             dmg = 1
             
-        # ダメージ計算: base_multi_hit × ultra_stages が総ヒット数
-        total_hits = self.multi_hit * self.ultra_stages
-        total_damage = dmg * total_hits
+        # 秒間攻撃回数分（multi_hit）の各攻撃ごとに命中判定を個別に行う
+        hits_landed = 0
+        for _ in range(self.multi_hit):
+            if random.random() < hit_chance:
+                hits_landed += 1
+        
+        # 命中した攻撃のダメージ合計に、段数ボーナスを掛ける
+        base_damage = dmg * hits_landed
+        total_damage = base_damage * self.ultra_stages
         
         crit_text = "【クリティカル！】" if is_crit else ""
-        if self.ultra_stages > 1:
-            # SPD >= 3001: "ダメージ×段数段=総ダメージ" 形式
-            dmg_per_stage = dmg * self.multi_hit  # ベース攻撃回数分をまとめた1段あたりのダメージ
-            logs.append(f"{self.name} は {target.name} に {crit_text}{dmg_per_stage:,}×{self.ultra_stages}段={total_damage:,} のダメージ！")
+        if hits_landed == 0:
+            # 全弾回避
+            hit_pct = hit_chance * 100
+            logs.append(f"{self.name} の攻撃は {target.name} に回避された！ (命中率{hit_pct:.1f}%)")
+        elif self.ultra_stages > 1:
+            # SPD >= 3001: 段数ボーナスあり → "ダメージ×段数段=総ダメージ" 形式
+            logs.append(f"{self.name} は {target.name} に {crit_text}{base_damage:,}×{self.ultra_stages}段={total_damage:,} のダメージ！")
         else:
             # SPD < 3000: 段数表記なし
             logs.append(f"{self.name} は {target.name} に {crit_text}{total_damage:,} のダメージ！")
