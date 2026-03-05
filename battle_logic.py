@@ -36,7 +36,7 @@ class Monster:
         self.is_dead = False
         
         # Attack speed logic
-        self.attack_interval, self.multi_hit = self._calculate_attack_speed()
+        self.attack_interval, self.multi_hit, self.ultra_stages = self._calculate_attack_speed()
         self.attack_range = 30.0 if self.range_type == "近接" else 150.0
         
         # Target lock
@@ -86,20 +86,36 @@ class Monster:
                     break
                     
         # 秒間攻撃回数を切り捨てで整数化（例: 1.7回/s → 1回, 2.0回/s → 2回）
-        hits_per_second = max(1, int(atk_spd))
+        # SPD >= 3000 の場合、ベースは常に20回/s、超高速倍率は「段数」として分離
+        if self.spd >= 3000:
+            base_hits_per_second = 20
+            # 超高速域の段数 (1～5)
+            if self.spd >= 100000:
+                ultra_stages = 5
+            elif self.spd >= 30000:
+                ultra_stages = 4
+            elif self.spd >= 10000:
+                ultra_stages = 3
+            elif self.spd >= 3001:
+                ultra_stages = 2
+            else:
+                ultra_stages = 1  # SPDがちょうど3000
+        else:
+            base_hits_per_second = max(1, int(atk_spd))
+            ultra_stages = 1
         
-        # 高速モンスターはアニメーション用に多段ヒットでまとめる（最大間隔0.25s）
-        if hits_per_second <= 4:
+        # アニメーション用のインターバルとヒット数
+        if base_hits_per_second <= 4:
             # 4回/s以下は1回ずつ攻撃
-            interval = 1.0 / hits_per_second
-            multi_hit = 1
+            interval = 1.0 / base_hits_per_second
+            base_multi_hit = 1
         else:
             # 5回/s以上は0.25s間隔でまとめて攻撃
             interval = 0.25
             actions_per_second = 4  # 1.0 / 0.25
-            multi_hit = max(1, hits_per_second // actions_per_second)
+            base_multi_hit = max(1, base_hits_per_second // actions_per_second)
             
-        return interval, multi_hit
+        return interval, base_multi_hit, ultra_stages
 
     def distance_to(self, other):
         return math.hypot(self.x - other.x, self.y - other.y)
@@ -220,13 +236,18 @@ class Monster:
         if dmg <= 0:
             dmg = 1
             
-        total_damage = dmg * self.multi_hit
+        # ダメージ計算: base_multi_hit × ultra_stages が総ヒット数
+        total_hits = self.multi_hit * self.ultra_stages
+        total_damage = dmg * total_hits
         
         crit_text = "【クリティカル！】" if is_crit else ""
-        if self.multi_hit > 1:
-            logs.append(f"{self.name} は {target.name} に {crit_text}{dmg}×{self.multi_hit}段={total_damage} のダメージ！")
+        if self.ultra_stages > 1:
+            # SPD >= 3001: "ダメージ×段数段=総ダメージ" 形式
+            dmg_per_stage = dmg * self.multi_hit  # ベース攻撃回数分をまとめた1段あたりのダメージ
+            logs.append(f"{self.name} は {target.name} に {crit_text}{dmg_per_stage:,}×{self.ultra_stages}段={total_damage:,} のダメージ！")
         else:
-            logs.append(f"{self.name} は {target.name} に {crit_text}{total_damage} のダメージ！")
+            # SPD < 3000: 段数表記なし
+            logs.append(f"{self.name} は {target.name} に {crit_text}{total_damage:,} のダメージ！")
             
         return {'target': target, 'total_damage': total_damage, 'logs': logs}
 
@@ -290,10 +311,18 @@ class Field:
                 
             # 移動後の最新座標でロックオンしたターゲットとの距離を再計算
             dist = m.distance_to(m.current_target)
+            
+            # ターゲットが同じステップ内で移動した分を補正するバッファ
+            # （追いかけ中に射程ギリギリでターゲットが逃げるのを防ぐ）
+            t = m.current_target
+            if t.mov == 0:
+                target_speed = 10.0
+            else:
+                target_speed = 80.0 * (1 + t.mov * 0.10)
+            chase_buffer = target_speed * delta_time
                 
-            # 新しい距離が射程内で、かつクールダウンが完了していれば攻撃
-            # ※浮動小数点演算の極小の誤差を許容するため +0.001 のバッファ
-            if dist <= m.attack_range + 0.001 and m.cooldown <= 0:
+            # 射程内（＋追撃バッファ）で、かつクールダウン完了なら攻撃
+            if dist <= m.attack_range + chase_buffer and m.cooldown <= 0:
                 attack_result = m.attack(m.current_target)
                 pending_attacks.append(attack_result)
         

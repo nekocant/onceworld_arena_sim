@@ -135,9 +135,9 @@ for idx, (t_name, t_list) in enumerate(teams_dict.items()):
         st.markdown(f"<h3 style='color:{color};'>🛡️ チーム {t_name}</h3>", unsafe_allow_html=True)
         for m in t_list:
             if m.m_type == "物理":
-                stats_str = f"HP:{m.hp:,}, ATK:{m.atk:,}, DEF:{m.defense:,}, MDEF:{m.mdefense:,}, SPD:{m.spd:,}, LUCK:{m.luck:,}"
+                stats_str = f"HP:{m.hp:,}, ATK:{m.atk:,}, DEF:{m.defense:,}, MDEF:{m.mdefense:,}, SPD:{m.spd:,}, LUCK:{m.luck:,}, MOV:{m.mov:,}"
             else:
-                stats_str = f"HP:{m.hp:,}, INT:{m.int_stat:,}, DEF:{m.defense:,}, MDEF:{m.mdefense:,}, SPD:{m.spd:,}, LUCK:{m.luck:,}"
+                stats_str = f"HP:{m.hp:,}, INT:{m.int_stat:,}, DEF:{m.defense:,}, MDEF:{m.mdefense:,}, SPD:{m.spd:,}, LUCK:{m.luck:,}, MOV:{m.mov:,}"
                 
             range_str = "🗡️近接" if getattr(m, 'range_type', '近接') == '近接' else "🏹遠隔"
             # Softer, natural drop shadow for readability on light backgrounds
