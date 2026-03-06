@@ -156,13 +156,14 @@ else:
     def sync_num_to_slider(s_k, n_k):
         raw_val = st.session_state[n_k]
         if raw_val < 1:
-            clamped = 1
+            st.session_state[n_k] = 1
+            st.session_state[s_k] = 1
         elif raw_val > 1100:
-            clamped = 1100
+            st.session_state[n_k] = 1100
+            st.session_state[s_k] = 1100
         else:
-            clamped = raw_val
-        st.session_state[n_k] = clamped
-        st.session_state[s_k] = clamped
+            st.session_state[s_k] = raw_val
+            # n_k には再代入しない（フロント側の連打ステートが上書きされてカクつくのを防ぐため）
 
     cols = st.columns(3)
     
@@ -293,24 +294,306 @@ team_colors_hex = {
 def colored_text(text, color):
     return f"<span style='color:{color}; font-weight:bold;'>{text}</span>"
 
+# Attribute Colors for faint backgrounds
+elem_bg_colors = {
+    "火": "rgba(255, 69, 0, 0.15)",   # Orange-Red
+    "水": "rgba(30, 144, 255, 0.15)", # Dodger Blue
+    "木": "rgba(50, 205, 50, 0.15)",  # Lime Green
+    "光": "rgba(255, 215, 0, 0.15)",  # Gold
+    "闇": "rgba(138, 43, 226, 0.15)"  # Blue Violet
+}
+elem_icons = {
+    "火": "🔥", "水": "💧", "木": "🌿", "光": "✨", "闇": "🌑"
+}
+
 # Display current teams
 st.write("---")
+max_team_size = max([len(t) for t in teams_dict.values()] + [0])
+all_m = [m for t_list in teams_dict.values() for m in t_list]
+
+if all_m:
+    v_hp = [m.hp for m in all_m]
+    v_atk = [m.atk if m.m_type == "物理" else m.int_stat for m in all_m]
+    v_def = [m.defense for m in all_m]
+    v_mdef = [m.mdefense for m in all_m]
+    v_luck = [m.luck for m in all_m]
+    v_spd = [m.spd for m in all_m]
+    v_mov = [m.mov for m in all_m]
+    
+    MIN_HP, MAX_HP = min(v_hp), max(v_hp)
+    MIN_ATK, MAX_ATK = min(v_atk), max(v_atk)
+    MIN_DEF, MAX_DEF = min(v_def), max(v_def)
+    MIN_MDEF, MAX_MDEF = min(v_mdef), max(v_mdef)
+    MIN_LUCK, MAX_LUCK = min(v_luck), max(v_luck)
+    MIN_SPD, MAX_SPD = min(v_spd), max(v_spd)
+    MIN_MOV, MAX_MOV = min(v_mov), max(v_mov)
+else:
+    MIN_HP=MAX_HP=MIN_ATK=MAX_ATK=MIN_DEF=MAX_DEF=MIN_MDEF=MAX_MDEF=MIN_LUCK=MAX_LUCK=MIN_SPD=MAX_SPD=MIN_MOV=MAX_MOV=0
+
+def get_pct(val, vmin, vmax):
+    if vmax == vmin: return 100
+    return max(0, min(100, ((val - vmin) / (vmax - vmin)) * 100))
+
 cols = st.columns(3)
 for idx, (t_name, t_list) in enumerate(teams_dict.items()):
     with cols[idx]:
         color = team_colors_hex[t_name]
         st.markdown(f"<h3 style='color:{color};'>🛡️ チーム {t_name}</h3>", unsafe_allow_html=True)
+        
+        # 1. Card View
         for m in t_list:
-            if m.m_type == "物理":
-                stats_str = f"HP:{m.hp:,}, ATK:{m.atk:,}, DEF:{m.defense:,}, MDEF:{m.mdefense:,}, SPD:{m.spd:,}, LUCK:{m.luck:,}, MOV:{m.mov:,}"
-            else:
-                stats_str = f"HP:{m.hp:,}, INT:{m.int_stat:,}, DEF:{m.defense:,}, MDEF:{m.mdefense:,}, SPD:{m.spd:,}, LUCK:{m.luck:,}, MOV:{m.mov:,}"
-                
-            range_str = "🗡️近接" if getattr(m, 'range_type', '近接') == '近接' else "🏹遠隔"
-            # Softer, natural drop shadow for readability on light backgrounds
+            range_icon = "🗡️近接" if getattr(m, 'range_type', '近接') == '近接' else "🏹遠隔"
+            type_icon = "⚔️物理" if m.m_type == "物理" else "🎇魔法"
+            
+            # 属性に応じたテキストカラー設定
+            elem_text_colors = {
+                "火": "#FF6347", # Tomato
+                "水": "#00BFFF", # DeepSkyBlue
+                "木": "#32CD32", # LimeGreen
+                "光": "#FFD700", # Gold
+                "闇": "#BA55D3"  # MediumOrchid
+            }
+            elem_color = elem_text_colors.get(m.element, "#ccc")
+            
+            # 魔法型は名前をピンク紫っぽく、物理型は白（少しシャドウをつけて見やすく）
             outline = "text-shadow: 1px 1px 3px rgba(0,0,0,0.9), 0px 0px 2px rgba(0,0,0,0.7);"
-            name_display = f"<span style='color:#DDA0DD; {outline}'>{m.name}</span>" if m.m_type == "魔法" else f"<span style='color:white; {outline}'>{m.name}</span>"
-            st.markdown(f"- **Lv.{m.level:,} {name_display}** ({range_str}/{m.m_type} | {stats_str})", unsafe_allow_html=True)
+            name_display = f"<span style='color:#DDA0DD; {outline} font-size: 1.1em;'>{m.name}</span>" if m.m_type == "魔法" else f"<span style='color:white; {outline} font-size: 1.1em;'>{m.name}</span>"
+            name_display += f" <span style='font-size: 0.85em; color: {elem_color}; font-weight: bold;'>({m.element}属性)</span>"
+
+            # 各ステータス行をフォーマット統一（アイコン＋項目名＋英語数値）
+            atk_stat = f"ATK: {m.atk:,}" if m.m_type == "物理" else f"INT: {m.int_stat:,}"
+            atk_line = f"🗡️攻撃系 {atk_stat} &nbsp;|&nbsp; SPD: {m.spd:,}"
+            def_line = f"🛡️防御系 VIT: {m.vit:,} &nbsp;|&nbsp; DEF: {m.defense:,} &nbsp;|&nbsp; MDEF: {m.mdefense:,}"
+            luck_line = f"🍀運 LUCK: {m.luck:,}"
+            mov_line = f"👟移動 MOV: {m.mov:,}"
+
+            card_html = f"""
+            <div style="
+                border: 1px solid rgba(255,255,255,0.2); 
+                border-radius: 8px; 
+                padding: 10px; 
+                margin-bottom: 10px;
+                background-color: rgba(255,255,255,0.05); /* 背景色は統一 */
+                box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            ">
+                <div style="margin-bottom: 5px;">
+                    <strong>Lv.{m.level:,}</strong> {name_display}
+                </div>
+                <div style="font-size: 0.85em; color: #ccc; margin-bottom: 8px;">
+                    {range_icon} / {type_icon} &nbsp;|&nbsp; <strong>HP: {m.hp:,}</strong>
+                </div>
+                <div style="font-size: 0.8em; line-height: 1.4;">
+                    <div style="color: #ff9999;">{atk_line}</div>
+                    <div style="color: #99ccff;">{def_line}</div>
+                    <div style="color: #ffff99;">{luck_line} &nbsp;|&nbsp; {mov_line}</div>
+                </div>
+            </div>
+            """
+            st.markdown(card_html, unsafe_allow_html=True)
+            
+        # 人数が少ないチームの場合、カードと同じ高さの透明なダミーを置いて高さを揃える
+        for _ in range(max_team_size - len(t_list)):
+            blank_html = """
+            <div style="
+                border: 1px solid transparent; 
+                padding: 10px; 
+                margin-bottom: 10px;
+                visibility: hidden;
+            ">
+                <div style="margin-bottom: 5px;">&nbsp;</div>
+                <div style="font-size: 0.85em; margin-bottom: 8px;">&nbsp;</div>
+                <div style="font-size: 0.8em; line-height: 1.4;">
+                    <div>&nbsp;</div><div>&nbsp;</div><div>&nbsp;</div>
+                </div>
+            </div>
+            """
+            st.markdown(blank_html, unsafe_allow_html=True)
+            
+        # 2. Data Table View (Custom HTML for clean sorting without extra Streamlit UI)
+        if t_list:
+            table_html = f"""
+            <style>
+                .stats-container-{t_name} {{
+                    width: 100%;
+                    overflow-x: auto;
+                }}
+                .sortable-table-{t_name} {{
+                    width: 100%;
+                    min-width: 700px;
+                    border-collapse: collapse;
+                    font-family: sans-serif;
+                    font-size: 0.85em;
+                    color: #eeeeee;
+                    text-align: left;
+                    background-color: rgba(0, 0, 0, 0.2);
+                    border-radius: 8px;
+                    /* overflow-x: auto コンテナ内での sticky のため overflow: hidden を削除 */
+                }}
+                .sortable-table-{t_name} th {{
+                    background-color: rgba(255, 255, 255, 0.15);
+                    color: white;
+                    padding: 8px;
+                    border-bottom: 2px solid rgba(255,255,255,0.4);
+                    cursor: pointer;
+                    user-select: none;
+                    font-weight: bold;
+                    transition: background-color 0.2s;
+                    text-align: left;
+                }}
+                .sortable-table-{t_name} th:hover {{
+                    background-color: rgba(255, 255, 255, 0.25);
+                }}
+                .sortable-table-{t_name} td {{
+                    padding: 6px 8px;
+                    border-bottom: 1px solid rgba(255,255,255,0.1);
+                    vertical-align: middle;
+                }}
+                .sortable-table-{t_name} tr:hover {{
+                    background-color: rgba(255,255,255,0.1);
+                }}
+                .bar-bg {{
+                    width: 100%;
+                    background-color: rgba(255,255,255,0.1);
+                    border-radius: 4px;
+                    height: 8px;
+                    margin-top: 2px;
+                    overflow: hidden;
+                }}
+                .bar-fill {{
+                    height: 100%;
+                    border-radius: 4px;
+                }}
+            </style>
+            <div class="stats-container-{t_name}">
+                <table class="sortable-table-{t_name}" id="table-{t_name}">
+                    <thead>
+                        <tr>
+                            <th style="position: sticky; left: 0; background-color: #333; z-index: 6; border-right: 1px solid rgba(255,255,255,0.2);" onclick="sortTable('{t_name}', 0, 'num')">名前(Lv順) ↕</th>
+                            <th onclick="sortTable('{t_name}', 1, 'num')">HP ↕</th>
+                            <th onclick="sortTable('{t_name}', 2, 'num')">ATK/INT ↕</th>
+                            <th onclick="sortTable('{t_name}', 3, 'num')">SPD ↕</th>
+                            <th onclick="sortTable('{t_name}', 4, 'num')">DEF ↕</th>
+                            <th onclick="sortTable('{t_name}', 5, 'num')">MDEF ↕</th>
+                            <th onclick="sortTable('{t_name}', 6, 'num')">LUCK ↕</th>
+                            <th onclick="sortTable('{t_name}', 7, 'num')">MOV ↕</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            """
+            
+            for m in t_list:
+                atk_val = m.atk if m.m_type == "物理" else m.int_stat
+                
+                # バーの長さを計算 (今選出されているメンバー内の最低値=0%、最高値=100%)
+                hp_pct = get_pct(m.hp, MIN_HP, MAX_HP)
+                atk_pct = get_pct(atk_val, MIN_ATK, MAX_ATK)
+                def_pct = get_pct(m.defense, MIN_DEF, MAX_DEF)
+                mdef_pct = get_pct(m.mdefense, MIN_MDEF, MAX_MDEF)
+                luck_pct = get_pct(m.luck, MIN_LUCK, MAX_LUCK)
+                spd_pct = get_pct(m.spd, MIN_SPD, MAX_SPD)
+                mov_pct = get_pct(m.mov, MIN_MOV, MAX_MOV)
+                
+                # 第一列のLvはdata-value属性として持たせてソート用に使う
+                name_color = "#DDA0DD" if m.m_type == "魔法" else "white"
+                table_html += f"""
+                        <tr>
+                            <td style="white-space: nowrap; position: sticky; left: 0; background-color: rgba(30, 30, 30, 0.95); border-right: 1px solid rgba(255,255,255,0.2); z-index: 5;" data-value="{m.level}">
+                                <strong style="color: {name_color};">{m.name}</strong><br><span style="font-size: 0.8em; color: #aaa;">Lv.{m.level:,}</span>
+                            </td>
+                            <td>
+                                <div style="color: white;">{m.hp:,}</div>
+                                <div class="bar-bg"><div class="bar-fill" style="width: {hp_pct}%; background-color: #ff6b6b;"></div></div>
+                            </td>
+                            <td>
+                                <div style="color: #ff9999;">{atk_val:,}</div>
+                                <div class="bar-bg"><div class="bar-fill" style="width: {atk_pct}%; background-color: #ff9f43;"></div></div>
+                            </td>
+                            <td>
+                                <div style="color: #ff9999;">{m.spd:,}</div>
+                                <div class="bar-bg"><div class="bar-fill" style="width: {spd_pct}%; background-color: #ff9f43;"></div></div>
+                            </td>
+                            <td>
+                                <div style="color: #99ccff;">{m.defense:,}</div>
+                                <div class="bar-bg"><div class="bar-fill" style="width: {def_pct}%; background-color: #54a0ff;"></div></div>
+                            </td>
+                            <td>
+                                <div style="color: #99ccff;">{m.mdefense:,}</div>
+                                <div class="bar-bg"><div class="bar-fill" style="width: {mdef_pct}%; background-color: #5f27cd;"></div></div>
+                            </td>
+                            <td>
+                                <div style="color: #ffff99;">{m.luck:,}</div>
+                                <div class="bar-bg"><div class="bar-fill" style="width: {luck_pct}%; background-color: #1abc9c;"></div></div>
+                            </td>
+                            <td>
+                                <div style="color: #fff;">{m.mov:,}</div>
+                                <div class="bar-bg"><div class="bar-fill" style="width: {mov_pct}%; background-color: #1dd1a1;"></div></div>
+                            </td>
+                        </tr>
+                """
+            
+            table_html += """
+                    </tbody>
+                </table>
+            </div>
+            <script>
+            function sortTable(teamName, colIndex, type) {
+                var table = document.getElementById("table-" + teamName);
+                if (!table) return;
+                var tbody = table.tBodies[0];
+                var rows = Array.from(tbody.rows);
+                
+                var header = table.tHead.rows[0].cells[colIndex];
+                
+                // 今回クリックされた列が、現在「降順（desc）」状態なら次は「昇順（asc）」にする。
+                // それ以外（初めてクリックされた、または別の列から移ってきた）の場合は必ず「降順（desc）」から始める。
+                var currentSort = header.getAttribute('data-sort');
+                var nextDirection = (currentSort === 'desc') ? 'asc' : 'desc';
+                var isAscending = (nextDirection === 'asc');
+                
+                // 全てのヘッダーからソート状態をクリア
+                var allHeaders = table.tHead.rows[0].cells;
+                for (var i = 0; i < allHeaders.length; i++) {
+                    allHeaders[i].removeAttribute('data-sort');
+                }
+                
+                rows.sort(function(a, b) {
+                    var cellA, cellB;
+                    
+                    if (colIndex === 0) {
+                        // ソート用に仕込んだ data-value 属性（Lv）を使用
+                        return isAscending 
+                            ? a.cells[colIndex].getAttribute('data-value') - b.cells[colIndex].getAttribute('data-value')
+                            : b.cells[colIndex].getAttribute('data-value') - a.cells[colIndex].getAttribute('data-value');
+                    }
+                    
+                    // Get the div's text content which holds the number, ignoring the div class="bar-bg"
+                    cellA = a.cells[colIndex].textContent.replace(/\\s+/g, '').replace(/,/g, '');
+                    cellB = b.cells[colIndex].textContent.replace(/\\s+/g, '').replace(/,/g, '');
+                    
+                    if (type === 'num') {
+                        // Extract just the numbers since textContent grabs everything
+                        var matchA = cellA.match(/\\d+/);
+                        var matchB = cellB.match(/\\d+/);
+                        var valA = matchA ? parseFloat(matchA[0]) : 0;
+                        var valB = matchB ? parseFloat(matchB[0]) : 0;
+                        return isAscending ? valA - valB : valB - valA;
+                    } else {
+                        return isAscending ? cellA.localeCompare(cellB, 'ja') : cellB.localeCompare(cellA, 'ja');
+                    }
+                });
+                
+                header.setAttribute('data-sort', nextDirection);
+                rows.forEach(function(row) { tbody.appendChild(row); });
+            }
+            </script>
+            """
+            
+            with st.expander(f"📊 チーム {t_name} ステータス一覧 (マッチアップ内偏差)", expanded=False):
+                import streamlit.components.v1 as components
+                # プログレスバー（高さのある行）が収まるように十分な高さを指定
+                # ヘッダー(約50px) + 1行あたり(約70px) + 下余白
+                estimated_height = 60 + (len(t_list) * 75) + 30
+                components.html(table_html, height=estimated_height, scrolling=True)
 
 # Bet and Speed
 st.write("---")
