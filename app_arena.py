@@ -92,11 +92,23 @@ else:
     
     # 漢字名へのよみがなマッピング（外部JSONから読み込み）
     import json
+    kana_mapping = {}
     try:
         with open("kana_mapping.json", "r", encoding="utf-8") as f:
             kana_mapping = json.load(f)
     except FileNotFoundError:
-        kana_mapping = {}
+        pass
+    except json.JSONDecodeError as e:
+        st.error(f"⚠️ `kana_mapping.json` の書式にエラーがあります（カンマの抜け等）。修正してください。\nエラー内容: {e}")
+        
+    # 攻撃範囲（battle_logic.py側で使う）のJSONエラーも手動選出画面で検知して警告を出す
+    try:
+        with open("attack_range.json", "r", encoding="utf-8") as f:
+            json.load(f)
+    except FileNotFoundError:
+        pass
+    except json.JSONDecodeError as e:
+        st.error(f"⚠️ `attack_range.json` の書式にエラーがあります（カンマの抜け等）。修正してください。\nエラー内容: {e}")
     
     # ひらがな⇔カタカナ変換ヘルパー
     def to_katakana(text):
@@ -136,6 +148,21 @@ else:
                         if search_lower in reading or search_kata in reading or search_hira in reading:
                             return True
         return False
+
+    # コールバック関数群（ループ外で定義してargsで変数を渡すことでメモリリークや意図しない動作を防ぐ）
+    def sync_slider_to_num(s_k, n_k):
+        st.session_state[n_k] = st.session_state[s_k]
+        
+    def sync_num_to_slider(s_k, n_k):
+        raw_val = st.session_state[n_k]
+        if raw_val < 1:
+            clamped = 1
+        elif raw_val > 1100:
+            clamped = 1100
+        else:
+            clamped = raw_val
+        st.session_state[n_k] = clamped
+        st.session_state[s_k] = clamped
 
     cols = st.columns(3)
     
@@ -212,22 +239,6 @@ else:
                     if num_key not in st.session_state:
                         st.session_state[num_key] = 100
                         
-                    # コールバック関数：スライダーが動いたら数値入力を更新
-                    def sync_slider_to_num(s_k=sl_key, n_k=num_key):
-                        st.session_state[n_k] = st.session_state[s_k]
-                        
-                    # コールバック関数：数値入力が動いたらスライダーを更新（範囲外入力は1〜1100に強制変換）
-                    def sync_num_to_slider(s_k=sl_key, n_k=num_key):
-                        raw_val = st.session_state[n_k]
-                        if raw_val < 1:
-                            clamped = 1
-                        elif raw_val > 1100:
-                            clamped = 1100
-                        else:
-                            clamped = raw_val
-                        st.session_state[n_k] = clamped
-                        st.session_state[s_k] = clamped
-                    
                     # 1. スライドバー
                     st.slider(
                         "レベルスライダー",
@@ -236,6 +247,7 @@ else:
                         step=1,
                         key=sl_key,
                         on_change=sync_slider_to_num,
+                        args=(sl_key, num_key),
                         label_visibility="collapsed"
                     )
                     
@@ -258,6 +270,7 @@ else:
                         step=1, 
                         key=num_key,
                         on_change=sync_num_to_slider,
+                        args=(sl_key, num_key),
                         label_visibility="collapsed"
                     )
                 
