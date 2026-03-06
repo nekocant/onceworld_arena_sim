@@ -308,6 +308,17 @@ elem_icons = {
 
 # Display current teams
 st.write("---")
+
+# レスポンシブ用CSS: スマホ（768px以下）ではスペーサーカードを非表示
+st.markdown("""
+<style>
+@media (max-width: 768px) {
+    .spacer-card {
+        display: none !important;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
 max_team_size = max([len(t) for t in teams_dict.values()] + [0])
 all_m = [m for t_list in teams_dict.values() for m in t_list]
 
@@ -392,9 +403,10 @@ for idx, (t_name, t_list) in enumerate(teams_dict.items()):
             st.markdown(card_html, unsafe_allow_html=True)
             
         # 人数が少ないチームの場合、カードと同じ高さの透明なダミーを置いて高さを揃える
+        # スマホ(768px以下)では .spacer-card クラスにより非表示になる
         for _ in range(max_team_size - len(t_list)):
             blank_html = """
-            <div style="
+            <div class="spacer-card" style="
                 border: 1px solid transparent; 
                 padding: 10px; 
                 margin-bottom: 10px;
