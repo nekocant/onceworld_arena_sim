@@ -39,6 +39,21 @@ class Monster:
         self.attack_interval, self.multi_hit, self.ultra_stages = self._calculate_attack_speed()
         self.attack_range = 30.0 if self.range_type == "近接" else 150.0
         
+        # 外部ファイルからの個別攻撃範囲の上書き
+        import json
+        import os
+        try:
+            # 毎回読み込むと重いので、クラス変数等でキャッシュするのが理想ですが、
+            # まずはシンプルに読み込み処理を入れます
+            range_file = os.path.join(os.path.dirname(__file__), 'attack_range.json')
+            if os.path.exists(range_file):
+                with open(range_file, 'r', encoding='utf-8') as f:
+                    ranges = json.load(f)
+                    if self.name in ranges:
+                        self.attack_range = float(ranges[self.name])
+        except Exception as e:
+            pass # jsonエラー等は無視してデフォルト値を使う
+        
         # Target lock
         self.current_target = None
 

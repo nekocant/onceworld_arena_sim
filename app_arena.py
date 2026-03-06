@@ -80,8 +80,62 @@ if mode == "ランダム選出":
     
 else:
     # Manual mode
-    monster_options = df['NO.'].astype(str) + " - " + df['ペット名']
+    # 属性フィルタの定義（モバイル用に短縮）
+    element_filters = {
+        "全": None,
+        "🔥": "火",
+        "💧": "水",
+        "🌿": "木",
+        "✨": "光",
+        "🌑": "闇",
+    }
     
+    # 漢字名へのよみがなマッピング（外部JSONから読み込み）
+    import json
+    try:
+        with open("kana_mapping.json", "r", encoding="utf-8") as f:
+            kana_mapping = json.load(f)
+    except FileNotFoundError:
+        kana_mapping = {}
+    
+    # ひらがな⇔カタカナ変換ヘルパー
+    def to_katakana(text):
+        return "".join(chr(ord(c) + 96) if 'ぁ' <= c <= 'ゖ' else c for c in text)
+    def to_hiragana(text):
+        return "".join(chr(ord(c) - 96) if 'ァ' <= c <= 'ヶ' else c for c in text)
+    
+    def fuzzy_match(search_term, option_text):
+        """NO.検索・ひらがな/カタカナあいまい検索・よみがな検索"""
+        search_lower = search_term.lower().strip()
+        option_lower = option_text.lower()
+        
+        # 1. そのまま一致
+        if search_lower in option_lower:
+            return True
+            
+        # 2. カタカナに変換して検索
+        search_kata = to_katakana(search_lower)
+        if search_kata in option_lower:
+            return True
+            
+        # 3. ひらがなに変換して検索
+        search_hira = to_hiragana(search_lower)
+        if search_hira in option_lower:
+            return True
+            
+        # 4. よみがなマッピングによる検索（漢字を含むペット名にヒットさせる）
+        # option_text は "NO - ペット名" の形式なので分割する
+        parts = option_text.split(" - ")
+        if len(parts) > 1:
+            pet_name = parts[1]
+            # ペット名に部分一致するマッピングを探す
+            for kanji, readings in kana_mapping.items():
+                if kanji in pet_name:
+                    for reading in readings:
+                        # 検索語がよみがなに含まれるかチェック
+                        if search_lower in reading or search_kata in reading or search_hira in reading:
+                            return True
+        return False
 
     cols = st.columns(3)
     
@@ -91,30 +145,128 @@ else:
             
         with cols[idx]:
             st.subheader(f"チーム {team_letter}")
+            
             num_mons = st.number_input(f"チーム{team_letter}のモンスター数", min_value=1, max_value=4, key=f"num_{team_letter}")
             
             for i in range(num_mons):
                 if f"lv_{team_letter}_{i}" not in st.session_state:
                     st.session_state[f"lv_{team_letter}_{i}"] = 100
                     
-                st.markdown(f"**モンスター {i+1}**")
-                search_term = st.text_input("検索", key=f"search_{team_letter}_{i}")
-                
-                # Filter options based on search
-                filtered_options = monster_options
-                if search_term:
-                    filtered_options = [opt for opt in monster_options if search_term in opt]
-                    if not filtered_options:
-                        filtered_options = monster_options # fallback if no match
+                # スロットごとに枠（ボーダー）で囲んで視認性を高める
+                with st.container(border=True):
+                    st.markdown(f"**🔹 スロット {i+1}**")
+                    
+                    # 属性フィルタ（スロットごと）
+                    filter_key = f"elem_filter_{team_letter}_{i}"
+                    if filter_key not in st.session_state:
+                        st.session_state[filter_key] = "全"
                         
-                sel_m = st.selectbox(f"種類", filtered_options, key=f"m_{team_letter}_{i}")
-                sel_no = int(sel_m.split(" - ")[0])
-                lv = st.number_input("レベル", min_value=1, max_value=1100, step=1, key=f"lv_{team_letter}_{i}")
+                    selected_filter = st.radio(
+                        "属性", 
+                        options=list(element_filters.keys()), 
+                        horizontal=True, 
+                        key=filter_key,
+                        label_visibility="collapsed"
+                    )
+                    
+                    # 属性でフィルタリングされたオプションを生成
+                    active_elem = element_filters[selected_filter]
+                    if active_elem:
+                        filtered_df = df[df['属性'] == active_elem]
+                    else:
+                        filtered_df = df
+                    base_options = filtered_df['NO.'].astype(str) + " - " + filtered_df['ペット名']
+                    
+                    # 検索ボックス（プレースホルダーを短く）
+                    search_term = st.text_input(
+                        "検索", 
+                        key=f"search_{team_letter}_{i}",
+                        placeholder="🔍 名前 or NO. を入力",
+                        label_visibility="collapsed"
+                    )
+                    
+                    # Filter options based on fuzzy search
+                    filtered_options = list(base_options)
+                    if search_term:
+                        filtered_options = [opt for opt in base_options if fuzzy_match(search_term, opt)]
+                        if not filtered_options:
+                            st.caption("⚠️ 該当なし")
+                            filtered_options = list(base_options) # fallback if no match
+                            
+                    sel_m = st.selectbox(
+                        "種類", 
+                        filtered_options, 
+                        key=f"m_{team_letter}_{i}", 
+                        label_visibility="collapsed"
+                    )
+                    
+                    # レベル入力（スライダーと数値入力の連動）
+                    st.markdown("**🔸 Lv (レベル)**")
+                    
+                    sl_key = f"lv_slider_{team_letter}_{i}"
+                    num_key = f"lv_num_{team_letter}_{i}"
+                    
+                    # 初期値のセット
+                    if sl_key not in st.session_state:
+                        st.session_state[sl_key] = 100
+                    if num_key not in st.session_state:
+                        st.session_state[num_key] = 100
+                        
+                    # コールバック関数：スライダーが動いたら数値入力を更新
+                    def sync_slider_to_num(s_k=sl_key, n_k=num_key):
+                        st.session_state[n_k] = st.session_state[s_k]
+                        
+                    # コールバック関数：数値入力が動いたらスライダーを更新（範囲外入力は1〜1100に強制変換）
+                    def sync_num_to_slider(s_k=sl_key, n_k=num_key):
+                        raw_val = st.session_state[n_k]
+                        if raw_val < 1:
+                            clamped = 1
+                        elif raw_val > 1100:
+                            clamped = 1100
+                        else:
+                            clamped = raw_val
+                        st.session_state[n_k] = clamped
+                        st.session_state[s_k] = clamped
+                    
+                    # 1. スライドバー
+                    st.slider(
+                        "レベルスライダー",
+                        min_value=1,
+                        max_value=1100,
+                        step=1,
+                        key=sl_key,
+                        on_change=sync_slider_to_num,
+                        label_visibility="collapsed"
+                    )
+                    
+                    # スライダーの目盛をさりげなく配置
+                    st.markdown(
+                        """
+                        <div style='display: flex; justify-content: space-between; font-size: 0.7em; color: gray; margin-top: -15px; margin-bottom: 5px; padding: 0 5px;'>
+                            <span>1</span>
+                            <span>550</span>
+                            <span>1100</span>
+                        </div>
+                        """, 
+                        unsafe_allow_html=True
+                    )
+                    
+                    # 2. 直接数値入力（微調整用）
+                    # min_value/max_valueを外すことでエラーブロックを回避し、コールバックで調整する
+                    lv = st.number_input(
+                        "レベル数値入力", 
+                        step=1, 
+                        key=num_key,
+                        on_change=sync_num_to_slider,
+                        label_visibility="collapsed"
+                    )
                 
                 # We instantiate and add right away, but prevent duplicates
+                sel_no = int(sel_m.split(" - ")[0])
+                lv = st.session_state[num_key]
                 is_duplicate = any(existing_m.no == sel_no for existing_m in teams_dict[team_letter])
                 if is_duplicate:
-                    st.warning(f"同じチームに同じモンスター（{sel_m}）を複数入れることはできません。別の種類を選んでください。")
+                    st.warning(f"⚠️ {sel_m} が重複しています他の種類を選んでください。")
                 else:
                     teams_dict[team_letter].append(create_monster(team_letter, sel_no, lv))
 
