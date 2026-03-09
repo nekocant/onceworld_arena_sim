@@ -31,16 +31,110 @@ div[data-baseweb="select"] > div {
 </style>
 """, unsafe_allow_html=True)
 
-# フォーカス時に入力を全選択するJavascriptの注入
+# UI拡張用Javascript注入（components.html経由で親ウィンドウを操作）
 components.html(
     """
     <script>
-    const doc = window.parent.document;
-    doc.addEventListener('focusin', function(e) {
-        if (e.target.tagName === 'INPUT' && (e.target.type === 'number' || e.target.type === 'text')) {
-            e.target.select();
+    var pdoc = window.parent.document;
+
+    // ガード: 多重登録を防止
+    if (!window.parent._uiExtLoaded) {
+        window.parent._uiExtLoaded = true;
+
+        // 1. 数値入力のフォーカス時に全選択
+        pdoc.addEventListener("focusin", function(e) {
+            if (e.target.tagName === "INPUT" && (e.target.type === "number" || e.target.type === "text")) {
+                e.target.select();
+            }
+        }, true);
+
+        // 2. モンスター選択ボックス（種類）を読み取り専用にする
+        setInterval(function() {
+            var inputs = pdoc.querySelectorAll("input[role='combobox']");
+            for (var i = 0; i < inputs.length; i++) {
+                var inp = inputs[i];
+                if (inp.getAttribute("aria-label") && inp.getAttribute("aria-label").indexOf("\u7a2e\u985e") !== -1) {
+                    if (!inp.readOnly) {
+                        inp.readOnly = true;
+                        inp.style.cursor = "pointer";
+                    }
+                }
+            }
+        }, 1000);
+
+        // 3. スライダーの微調整機能（精密モード）
+        // ドラッグ中にマウスが0.5秒間静止したら精密モードを起動する
+        var isPrec = false;
+        var stillTimer = null;
+        var isDragging = false;
+        var precStartX = 0;
+        var precStartV = 0;
+        var aInp = null;
+        var activeThumb = null;
+        var indic = pdoc.getElementById("slider-prec-ind");
+        if (!indic) {
+            indic = pdoc.createElement("div");
+            indic.id = "slider-prec-ind";
+            indic.style.cssText = "position:fixed;background:rgba(30,144,255,0.9);color:white;padding:4px 10px;border-radius:15px;font-size:12px;z-index:99999;pointer-events:none;display:none;box-shadow:0 2px 8px rgba(0,0,0,0.4);font-family:sans-serif;min-width:100px;text-align:center;";
+            pdoc.body.appendChild(indic);
         }
-    }, true);
+
+        pdoc.addEventListener("mousedown", function(e) {
+            var thumb = e.target.closest("div[role='slider']");
+            if (!thumb) return;
+            var lbl = thumb.getAttribute("aria-label");
+            if (!lbl || lbl.indexOf("\u30ec\u30d9\u30eb\u30b9\u30e9\u30a4\u30c0\u30fc") === -1) return;
+            var ct = thumb.closest("[data-baseweb='slider']");
+            if (!ct) return;
+            aInp = ct.querySelector("input[type='range']");
+            if (!aInp) return;
+            isDragging = true;
+            activeThumb = thumb;
+        }, true);
+
+        pdoc.addEventListener("mousemove", function(e) {
+            if (!isDragging || !aInp) return;
+
+            if (isPrec) {
+                // 精密モード中: 低感度で値を更新
+                e.preventDefault();
+                e.stopPropagation();
+                var diff = (e.clientX - precStartX) * 0.15;
+                var val = Math.max(1, Math.min(1100, Math.round(precStartV + diff)));
+                var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                setter.call(aInp, val);
+                aInp.dispatchEvent(new Event("input", {bubbles: true}));
+                aInp.dispatchEvent(new Event("change", {bubbles: true}));
+                indic.style.left = (e.clientX + 20) + "px";
+                indic.style.top = (e.clientY - 40) + "px";
+                indic.innerText = "\u7cbe\u5bc6\u8abf\u6574\u4e2d: " + val;
+            } else {
+                // まだ精密モードでない: マウスが動くたびにタイマーをリセット
+                // 0.5秒間止まったら精密モードに切り替え
+                clearTimeout(stillTimer);
+                stillTimer = setTimeout(function() {
+                    isPrec = true;
+                    precStartX = e.clientX;
+                    precStartV = parseInt(aInp.value) || 100;
+                    if (activeThumb) activeThumb.style.cursor = "ew-resize";
+                    indic.style.display = "block";
+                    indic.style.left = (e.clientX + 20) + "px";
+                    indic.style.top = (e.clientY - 40) + "px";
+                    indic.innerText = "\u7cbe\u5bc6\u8abf\u6574\u4e2d: " + precStartV;
+                }, 500);
+            }
+        }, true);
+
+        pdoc.addEventListener("mouseup", function() {
+            clearTimeout(stillTimer);
+            isDragging = false;
+            isPrec = false;
+            aInp = null;
+            activeThumb = null;
+            indic.style.display = "none";
+        }, true);
+    }
+
     </script>
     """,
     height=0,
