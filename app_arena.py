@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import random
 from battle_logic import Monster, Field
@@ -29,6 +30,21 @@ div[data-baseweb="select"] > div {
 }
 </style>
 """, unsafe_allow_html=True)
+
+# フォーカス時に入力を全選択するJavascriptの注入
+components.html(
+    """
+    <script>
+    const doc = window.parent.document;
+    doc.addEventListener('focusin', function(e) {
+        if (e.target.tagName === 'INPUT' && (e.target.type === 'number' || e.target.type === 'text')) {
+            e.target.select();
+        }
+    }, true);
+    </script>
+    """,
+    height=0,
+)
 
 # Load data (removed cache so edits to CSV are immediately reflected)
 def load_data(filename):
@@ -80,14 +96,14 @@ if mode == "ランダム選出":
     
 else:
     # Manual mode
-    # 属性フィルタの定義（モバイル用に短縮）
+    # 属性フィルタの定義
     element_filters = {
         "全": None,
-        "🔥": "火",
-        "💧": "水",
-        "🌿": "木",
-        "✨": "光",
-        "🌑": "闇",
+        "火": "火",
+        "水": "水",
+        "木": "木",
+        "光": "光",
+        "闇": "闇",
     }
     
     # 漢字名へのよみがなマッピング（外部JSONから読み込み）
@@ -149,21 +165,25 @@ else:
                             return True
         return False
 
-    # コールバック関数群（ループ外で定義してargsで変数を渡すことでメモリリークや意図しない動作を防ぐ）
+    # コールバック関数群（ループ外で定義）
     def sync_slider_to_num(s_k, n_k):
-        st.session_state[n_k] = st.session_state[s_k]
+        if st.session_state[n_k] != st.session_state[s_k]:
+            st.session_state[n_k] = st.session_state[s_k]
         
     def sync_num_to_slider(s_k, n_k):
-        raw_val = st.session_state[n_k]
-        if raw_val < 1:
-            st.session_state[n_k] = 1
-            st.session_state[s_k] = 1
-        elif raw_val > 1100:
-            st.session_state[n_k] = 1100
-            st.session_state[s_k] = 1100
-        else:
-            st.session_state[s_k] = raw_val
-            # n_k には再代入しない（フロント側の連打ステートが上書きされてカクつくのを防ぐため）
+        # 範囲外入力のクランプ（1〜1100）
+        val = st.session_state[n_k]
+        if val < 1: st.session_state[n_k] = 1
+        elif val > 1100: st.session_state[n_k] = 1100
+        
+        if st.session_state[s_k] != st.session_state[n_k]:
+            st.session_state[s_k] = st.session_state[n_k]
+
+    def clamp_num_monsters(k):
+        # チーム人数のクランプ（1〜4）
+        val = st.session_state[k]
+        if val < 1: st.session_state[k] = 1
+        elif val > 4: st.session_state[k] = 4
 
     cols = st.columns(3)
     
@@ -174,7 +194,18 @@ else:
         with cols[idx]:
             st.subheader(f"チーム {team_letter}")
             
-            num_mons = st.number_input(f"チーム{team_letter}のモンスター数", min_value=1, max_value=4, key=f"num_{team_letter}")
+            num_mons = st.number_input(
+                f"チーム{team_letter}のモンスター数", 
+                step=1, 
+                key=f"num_{team_letter}",
+                on_change=clamp_num_monsters,
+                args=(f"num_{team_letter}",)
+            )
+            
+            # 内部での整合性チェック（初期表示用など）
+            if st.session_state[f"num_{team_letter}"] < 1: st.session_state[f"num_{team_letter}"] = 1
+            if st.session_state[f"num_{team_letter}"] > 4: st.session_state[f"num_{team_letter}"] = 4
+            num_mons = st.session_state[f"num_{team_letter}"]
             
             for i in range(num_mons):
                 if f"lv_{team_letter}_{i}" not in st.session_state:
@@ -209,7 +240,7 @@ else:
                     search_term = st.text_input(
                         "検索", 
                         key=f"search_{team_letter}_{i}",
-                        placeholder="🔍 名前 or NO. を入力",
+                        placeholder="🔍 名前 or NO. を入力 (例)はく→白竜",
                         label_visibility="collapsed"
                     )
                     
@@ -252,7 +283,7 @@ else:
                         label_visibility="collapsed"
                     )
                     
-                    # スライダーの目盛をさりげなく配置
+                    # スライダーの目盛
                     st.markdown(
                         """
                         <div style='display: flex; justify-content: space-between; font-size: 0.7em; color: gray; margin-top: -15px; margin-bottom: 5px; padding: 0 5px;'>
@@ -265,7 +296,8 @@ else:
                     )
                     
                     # 2. 直接数値入力（微調整用）
-                    # min_value/max_valueを外すことでエラーブロックを回避し、コールバックで調整する
+                    # min_value/max_valueを設定することで、ウィジェット内での連打が安定する
+                    # keyによるステート管理を行い、value引数は提供しない（競合回避）
                     lv = st.number_input(
                         "レベル数値入力", 
                         step=1, 
@@ -302,10 +334,6 @@ elem_bg_colors = {
     "光": "rgba(255, 215, 0, 0.15)",  # Gold
     "闇": "rgba(138, 43, 226, 0.15)"  # Blue Violet
 }
-elem_icons = {
-    "火": "🔥", "水": "💧", "木": "🌿", "光": "✨", "闇": "🌑"
-}
-
 # Display current teams
 st.write("---")
 
@@ -323,9 +351,20 @@ st.markdown("""
     }
 }
 /* コンテナ全体の横幅はみ出し防止 */
-.block-container {
-    max-width: 100% !important;
-    overflow-x: hidden;
+/* 属性選択ボタン（st.radio）のテキスト色分け */
+/* CSSの nth-child を使用して、各選択肢（全, 火, 水, 木, 光, 闇）に色を適用します */
+div[role="radiogroup"][aria-label="属性"] label:nth-child(2) p { color: #FF4500 !important; } /* 火 */
+div[role="radiogroup"][aria-label="属性"] label:nth-child(3) p { color: #1E90FF !important; } /* 水 */
+div[role="radiogroup"][aria-label="属性"] label:nth-child(4) p { color: #32CD32 !important; } /* 木 */
+div[role="radiogroup"][aria-label="属性"] label:nth-child(5) p { color: #FFD700 !important; } /* 光 */
+div[role="radiogroup"][aria-label="属性"] label:nth-child(6) p { color: #BA55D3 !important; } /* 闇 */
+
+/* 選択された状態の枠線を強調 */
+div[data-testid="stRadioOption"] {
+    transition: background-color 0.3s;
+}
+div[data-testid="stRadioOption"]:hover {
+    background-color: rgba(255,255,255,0.05);
 }
 </style>
 """, unsafe_allow_html=True)
@@ -544,7 +583,9 @@ if all_m:
                         {m.team}
                     </td>
                     <td class="sticky-col" data-value="{m.level}">
-                        <strong style="color: {name_color};">{m.name}</strong><br><span style="font-size: 0.8em; color: #aaa;">Lv.{m.level:,}</span>
+                        <strong style="color: {name_color};">{m.name}</strong>
+                        <span style="color: {'white' if m.m_type == '物理' else '#BA55D3'}; font-size: 0.8em; margin-left: 5px;">({m.m_type})</span>
+                        <br><span style="font-size: 0.8em; color: #aaa;">Lv.{m.level:,}</span>
                     </td>
                     <td>
                         <div style="color: white;">{m.hp:,}</div>
