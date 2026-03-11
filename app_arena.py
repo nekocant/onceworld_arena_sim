@@ -133,6 +133,92 @@ components.html(
             activeThumb = null;
             indic.style.display = "none";
         }, true);
+        
+        // 4. WanaKana.jsを使ったIMEオフ時の自動平仮名変換（テキスト入力補助）
+        // React（Streamlit）のステートと競合しないよう、手動でイベントをインターセプトする
+        var wkScript = pdoc.createElement("script");
+        wkScript.src = "https://unpkg.com/wanakana";
+        wkScript.onload = function() {
+            setInterval(function() {
+                var inps = pdoc.querySelectorAll('input[type="text"]');
+                for (var i = 0; i < inps.length; i++) {
+                    var inp = inps[i];
+                    var ph = inp.getAttribute("placeholder") || "";
+                    if (ph.indexOf("名前 or NO.") !== -1) {
+                        if (!inp._wkCustomBound) {
+                            inp._wkCustomBound = true;
+                            
+                            // 独自関数: 大文字の英字は変換対象から除外し、それ以外をwanakanaに渡すよう工夫するか、
+                            // passRomaji オプションを使う。WanaKanaの `passRomaji: true` を使うと未知の文字は放置される。
+                            // しかし大文字はデフォルトでカタカナに変換されたり、無視されたりする挙動のブレがある。
+                            // よって「入力文字列の中に大文字アルファベット(A-Z)が連続して存在する場合、
+                            // 大文字部分はWanaKanaの変換を通さない」という自作ラッパーを作る。
+                            var safeToHiragana = function(text, isComplete) {
+                                // 1. 文字列を「すべて大文字の英字かどうか」で分割
+                                // ここでは、大文字英字だけを特別扱いし、他の小文字ローマ字などをWanaKanaに渡す。
+                                var result = "";
+                                var tempLower = "";
+                                
+                                for(var j=0; j<text.length; j++) {
+                                    var c = text[j];
+                                    if (/[A-Z]/.test(c)) {
+                                        // 小文字のストックがあれば先に変換して吐き出す
+                                        if (tempLower.length > 0) {
+                                            result += window.parent.wanakana.toHiragana(tempLower, { IMEMode: !isComplete });
+                                            tempLower = "";
+                                        }
+                                        result += c; // 大文字はそのまま
+                                    } else {
+                                        tempLower += c;
+                                    }
+                                }
+                                if (tempLower.length > 0) {
+                                    result += window.parent.wanakana.toHiragana(tempLower, { IMEMode: !isComplete });
+                                }
+                                return result;
+                            };
+
+                            inp.addEventListener('input', function(e) {
+                                if (e.isComposing) return;
+                                
+                                var tgt = e.target;
+                                var orig = tgt.value;
+                                var converted = safeToHiragana(orig, false); // isComplete = false
+                                
+                                if (orig !== converted) {
+                                    var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                                    var start = tgt.selectionStart;
+                                    var end = tgt.selectionEnd;
+                                    
+                                    setter.call(tgt, converted);
+                                    tgt.dispatchEvent(new Event("input", { bubbles: true }));
+                                    
+                                    var diff = converted.length - orig.length;
+                                    tgt.setSelectionRange(start + diff, end + diff);
+                                }
+                            }, { capture: true });
+                            
+                            var forceConvert = function(e) {
+                                var tgt = e.target;
+                                var orig = tgt.value;
+                                var converted = safeToHiragana(orig, true); // isComplete = true (r->る など終端子音を確定)
+                                if (orig !== converted) {
+                                    var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                                    setter.call(tgt, converted);
+                                    tgt.dispatchEvent(new Event("input", { bubbles: true }));
+                                    tgt.dispatchEvent(new Event("change", { bubbles: true }));
+                                }
+                            };
+                            inp.addEventListener("blur", forceConvert);
+                            inp.addEventListener("keydown", function(e) {
+                                if (e.key === "Enter") forceConvert(e);
+                            });
+                        }
+                    }
+                }
+            }, 1000);
+        };
+        pdoc.head.appendChild(wkScript);
     }
 
     </script>
@@ -168,6 +254,13 @@ badge_url = "https://hits.sh/onceworld-arena.streamlit.app.svg?color=10b500"
 st.markdown(f'<img src="{badge_url}" alt="Hits">', unsafe_allow_html=True)
 # --- UI Setup ---
 mode = st.radio("選出モード", ["ランダム選出", "手動選出"], horizontal=True)
+
+# Team Colors
+team_colors_hex = {
+    "A": "#FF4B4B", # Red
+    "B": "#1E90FF", # Blue 
+    "C": "#32CD32"  # Green
+}
 
 teams_dict = {"A": [], "B": [], "C": []}
 
@@ -286,7 +379,8 @@ else:
             st.session_state[f"num_{team_letter}"] = 1
             
         with cols[idx]:
-            st.subheader(f"チーム {team_letter}")
+            color = team_colors_hex[team_letter]
+            st.markdown(f"<h3 style='color:{color};'>チーム {team_letter}</h3>", unsafe_allow_html=True)
             
             num_mons = st.number_input(
                 f"チーム{team_letter}のモンスター数", 
@@ -411,11 +505,6 @@ else:
                     teams_dict[team_letter].append(create_monster(team_letter, sel_no, lv))
 
 # Team Colors
-team_colors_hex = {
-    "A": "#FF4B4B", # Red
-    "B": "#1E90FF", # Blue 
-    "C": "#32CD32"  # Green
-}
 
 def colored_text(text, color):
     return f"<span style='color:{color}; font-weight:bold;'>{text}</span>"
