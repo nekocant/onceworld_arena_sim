@@ -128,7 +128,7 @@ class Monster:
             # 5回/s以上は0.25s間隔でまとめて攻撃
             interval = 0.25
             actions_per_second = 4  # 1.0 / 0.25
-            base_multi_hit = max(1, base_hits_per_second // actions_per_second)
+            base_multi_hit = max(1, round(base_hits_per_second / actions_per_second))
             
         return interval, base_multi_hit, ultra_stages
 
