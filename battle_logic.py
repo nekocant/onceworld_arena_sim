@@ -35,11 +35,13 @@ class Monster:
         self.cooldown = 0.0
         self.is_dead = False
         
-        # Attack speed logic
+        # Attack speed and range logic
         self.attack_interval, self.multi_hit, self.ultra_stages = self._calculate_attack_speed()
+        
+        # デフォルト射程の設定
         self.attack_range = 30.0 if self.range_type == "近接" else 150.0
         
-        # 外部ファイルからの個別攻撃範囲の上書き
+        # 外部ファイルからの個別攻撃範囲の上書き（UI表示タイプとは独立して計算に使用）
         import json
         import os
         try:

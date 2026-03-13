@@ -524,7 +524,7 @@ for idx, (t_name, t_list) in enumerate(teams_dict.items()):
         
         # 1. Card View
         for m in t_list:
-            range_icon = "🗡️近接" if getattr(m, 'range_type', '近接') == '近接' else "🏹遠隔"
+            range_icon = "🗡️近接" if m.range_type == '近接' else "🏹遠隔"
             type_icon = "⚔️物理" if m.m_type == "物理" else "🎇魔法"
             
             # 属性に応じたテキストカラー設定
