@@ -22,7 +22,7 @@ class Monster:
         self.int_stat = math.floor(base_data['INT'] * lv_multiplier)
         
         base_def = math.floor(base_data['DEF'] * lv_multiplier)
-        base_mdef = math.floor(base_data['MDEF'] * lv_multiplier)
+        base_mdef = math.floor(base_data['M-DEF'] * lv_multiplier)
         self.defense = math.floor(base_def + base_mdef / 10)
         self.mdefense = math.floor(base_mdef + base_def / 10)
         
